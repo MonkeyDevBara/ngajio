@@ -39,3 +39,21 @@ Logout membersihkan data lokal supaya pergantian akun tidak mencampur data.
 
 ## D10. Repo
 Folder `ngajio` belum punya `.git` sendiri (proyek lain punya). Sebelum pekerjaan, jalankan `git init` di `ngajio` dan buat commit awal dari kode yang ada agar PM bisa bekerja di cabang. `docs/` tidak ikut di-deploy.
+
+## D11. Keputusan PM atas ambiguitas rencana (2026-11-03)
+- A1: kunci tak dikenal pada push ditolak (`validation`). Dibuang diam-diam berisiko kehilangan data. Saat UI menambah field, server diperbarui bersamaan.
+- A2: pelanggaran per perubahan masuk `rejected`, bukan menggagalkan seluruh permintaan, agar antrian tidak macet.
+- A3: rentang `nilai` dibaca dari `NilaiPicker` dan `nilaiLabel`, bukan ditebak.
+- A4: `onboarded` di perangkat kedua diturunkan dari `pengajar.nama` server tidak kosong.
+- A5: akun Google berbeda di perangkat dengan perubahan belum terkirim diblokir sampai pengguna mengekspor atau membuang.
+- A6: `/api/config` juga mengembalikan `devLogin` (true hanya di bawah penjaga dev).
+- A7: tombol "Hapus akun" di pengaturan hanya keluar dan tidak menghapus data server. Di versi pertama label diganti "Keluar", tanpa endpoint penghapusan akun. Karena menyangkut data anak, ini jadi pertanyaan privasi untuk pemilik (tindak lanjut), bukan diputuskan diam-diam.
+- A8: `COOKIE_SECURE=false` hanya diizinkan bila `ENV=dev`.
+- A9: `localStorage` cukup untuk versi pertama (5.000 setoran sekitar 1,5 MB plus shadow). IndexedDB adalah peningkatan nanti, tanpa dependency baru.
+- A10: Client ID Google belum ada. Semua dibangun dan diuji tanpanya, login nyata baru bisa diuji setelah pemilik memberi nilai env.
+- A11: batas per IP di belakang nginx memercayai `X-Real-IP` hanya dari peer loopback.
+- A12: batas laju dan sesi dalam memori, reset saat restart. Diterima.
+- A13: batas paket gratis 50 santri tetap di klien (di luar lingkup).
+- A14: deteksi data lokal lama: tanpa `mode` dan email sama dengan email mock berarti contoh.
+- A15: penanda waktu server hanya `rev`. `tglSinkron` memakai waktu asli.
+Kontrak lengkap ada di `docs/API.md`.
