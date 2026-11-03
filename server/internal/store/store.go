@@ -309,3 +309,25 @@ func (s *Store) DeleteExpiredSessions(ctx context.Context, now time.Time) (int64
 	})
 	return n, err
 }
+
+// VacuumInto writes a consistent copy of the database to path (which must not
+// exist). The path comes from the program, never from a client. It holds the
+// write connection while it runs.
+func (s *Store) VacuumInto(ctx context.Context, path string) error {
+	_, err := s.w.ExecContext(ctx, `VACUUM INTO ?`, path)
+	return err
+}
+
+// PruneMut deletes sync mutation ids recorded before the given time and returns how many.
+func (s *Store) PruneMut(ctx context.Context, before time.Time) (int64, error) {
+	var n int64
+	err := s.Tx(ctx, func(tx *sql.Tx) error {
+		res, err := tx.ExecContext(ctx, `DELETE FROM mut WHERE at<?`, before.Unix())
+		if err != nil {
+			return err
+		}
+		n, err = res.RowsAffected()
+		return err
+	})
+	return n, err
+}

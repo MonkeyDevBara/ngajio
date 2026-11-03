@@ -77,7 +77,7 @@ Whitelist di server. Kunci tak dikenal ditolak, keluaran di-marshal ulang dari f
 | metode | nama ≤60, template bool, level[] maksimal 30 masing-masing `{id, nama ≤80, jumlahHalaman int 1..2000}` |
 | kelompok | nama ≤80, jadwal ≤120, metodeId, arsip bool, urutan? maksimal 500 id |
 | santri | nama ≤100, kelompokId, metodeId, arah enum, waWali? ≤20 cocok `^[0-9+ -]*$`, arsip bool, hafalAwal[] maksimal 114 int 1..114, targetZiyadahPekan? int 0..1000 |
-| setoran | santriId, kelompokSaatItu (boleh kosong), jenis ziyadah, murojaah, atau tahsin, suratAwal dan suratAkhir? 1..114, ayatAwal dan ayatAkhir? 1..286, levelId?, halamanAwal dan halamanAkhir? 1..2000, nilai int (rentang diambil dari `NilaiPicker` dan `nilaiLabel`, jangan menebak), catatan? ≤1000, tag[] maksimal 10 masing-masing ≤40, dicatatPada wajib RFC3339 ≤40 karakter, diubahPada? dan hapusPada? RFC3339 |
+| setoran | santriId, kelompokSaatItu (boleh kosong), jenis ziyadah, murojaah, atau tahsin, suratAwal dan suratAkhir? 1..114, ayatAwal dan ayatAkhir? 1..286, levelId?, halamanAwal dan halamanAkhir? 1..2000, nilai int 1..5 (sesuai `NilaiPicker` dan `nilaiLabel`; 0 ditolak, form setoran memblokirnya di klien), ambangLulus pada tabel pengajar juga int 1..5, catatan? ≤1000, tag[] maksimal 10 masing-masing ≤40, dicatatPada wajib RFC3339 ≤40 karakter, diubahPada? dan hapusPada? RFC3339 |
 | target | santriId?, kelompokId?, jenis hafalan, ziyadah-pekan, atau tahsin, nilaiTarget angka hingga 0..100000, satuan ≤20, mulai dan tenggat RFC3339 |
 
 Integritas referensi (santriId ada, dan seterusnya) tidak ditegakkan di server karena push offline datang tidak berurutan. Klien menoleransi referensi menggantung seperti sekarang.
@@ -125,3 +125,10 @@ Kunci baru `ngajio:sync:v1`. `ngajio:v1` dan `ngajio:intro` tidak diubah.
 - IP klien: `RemoteAddr`. Header dari `TRUST_PROXY_HEADER` (default `X-Real-IP`) hanya dipercaya bila peer langsung adalah loopback. Bila isinya daftar, entri terakhir dipakai dan harus lolos `netip.ParseAddr`; selain itu kembali ke IP peer.
 - Jumlah kunci bucket dibatasi 100.000 (gagal tertutup) dan kunci yang menganggur dibersihkan berkala. Keadaan ada di memori dan reset saat restart.
 - Catatan operasional: pengajar yang berbagi satu Wi-Fi (misalnya satu pesantren) berbagi satu bucket. Batas ini cukup longgar untuk pemakaian normal.
+
+## Catatan implementasi sinkron (T3)
+- Kunci tak dikenal ditolak dengan pesan `unknown field` tanpa menggemakan data klien. `hapus:true` diterima untuk semua tabel kecuali `pengajar`.
+- Kursor yang lebih besar dari `users.rev` mengembalikan tanpa perubahan dan kursor server saat ini.
+- Pengecualian echo hanya berlaku untuk permintaan yang menulis. Bila penarikan berhalaman (`more`) melewati rentang `rev` milik sendiri, klien menerima tulisannya sendiri kembali (isi sama, tidak berbahaya).
+- `mut` hanya mencatat perubahan yang diterapkan. Perubahan yang ditolak (termasuk kuota) tidak dicatat sehingga bisa dicoba lagi.
+- Pekerjaan harian: backup `VACUUM INTO` (7 salinan, mode 0600, ditulis `.tmp` lalu di-rename) dan pembersihan `mut` lebih dari 90 hari. Berjalan saat start, lalu dicek tiap jam, sekali per hari kalender lokal.

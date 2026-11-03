@@ -15,10 +15,12 @@ import (
 	"time"
 
 	"ngajio/server/internal/auth"
+	"ngajio/server/internal/backup"
 	"ngajio/server/internal/config"
 	"ngajio/server/internal/httpx"
 	"ngajio/server/internal/limit"
 	"ngajio/server/internal/store"
+	syncapi "ngajio/server/internal/sync"
 )
 
 // errShutdownTimeout is returned by serve when the drain ran out of time.
@@ -64,8 +66,12 @@ func run(cfg config.Config, logger *log.Logger) error {
 	var jobs sync.WaitGroup
 	defer func() { stopBG(); jobs.Wait() }()
 	lim := limit.New(authRate, authBurst)
-	h, a := buildHandler(cfg, st, logger, options{Limiter: lim})
-	jobs.Add(2)
+	syncLim := limit.New(syncapi.Rate, syncapi.Burst)
+	h, a := buildHandler(cfg, st, logger, options{Limiter: lim, SyncLimiter: syncLim})
+	bk := &backup.Job{Store: st, Dir: cfg.BackupDir, Logger: logger}
+	jobs.Add(4)
+	go func() { defer jobs.Done(); syncLim.Run(bg, time.Minute) }()
+	go func() { defer jobs.Done(); bk.Run(bg) }()
 	go func() { defer jobs.Done(); a.RunCleanup(bg, auth.CleanupInterval) }()
 	go func() { defer jobs.Done(); lim.Run(bg, time.Minute) }()
 
@@ -130,6 +136,9 @@ type options struct {
 	Verifier auth.Verifier  // nil: build the Google verifier when GOOGLE_CLIENT_ID is set
 	Limiter  *limit.Limiter // nil: a default limiter without the eviction goroutine
 	Now      func() time.Time
+
+	SyncLimiter *limit.Limiter // nil: a default per-user limiter without the eviction goroutine
+	SyncQuota   int            // 0: the default record quota (tests lower it)
 }
 
 func newHandler(cfg config.Config, st *store.Store, logger *log.Logger) http.Handler {
@@ -159,6 +168,11 @@ func buildHandler(cfg config.Config, st *store.Store, logger *log.Logger, o opti
 		a.Limiter = limit.New(authRate, authBurst)
 	}
 	a.Register(mux, cfg.DevLogin)
+	sl := o.SyncLimiter
+	if sl == nil {
+		sl = limit.New(syncapi.Rate, syncapi.Burst)
+	}
+	(&syncapi.Handler{Store: st, Limiter: sl, Quota: o.SyncQuota}).Register(mux, a.Require)
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, httpx.CodeNotFound, "not found")
 	})
