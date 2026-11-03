@@ -7,6 +7,7 @@
 	import { page } from '$app/state';
 	import { app } from '#lib/store.svelte.ts';
 	import Icon from '#lib/ui/Icon.svelte';
+	import PasangLayar from '#lib/ui/PasangLayar.svelte';
 	import Toast from '#lib/ui/Toast.svelte';
 
 	let { children }: LayoutProps = $props();
@@ -52,6 +53,15 @@
 		terap();
 		mq.addEventListener('change', terap);
 		return () => mq.removeEventListener('change', terap);
+	});
+
+	// Setelah masuk baru: tawarkan 'pasang di layar utama' sekali, di halaman tujuan (bukan saat muat ulang).
+	let bukaPasang = $state(false);
+	$effect(() => {
+		if (!app.tawarkanPasang || !app.siap || !(path === '/' || setup)) return;
+		app.tawarkanPasang = false;
+		const terpasang = window.matchMedia('(display-mode: standalone)').matches || (navigator as { standalone?: boolean }).standalone;
+		if (!terpasang && localStorage.getItem('ngajio:a2hs') !== 'skip') bukaPasang = true;
 	});
 
 	const tab = [
@@ -136,6 +146,10 @@
 	{:else}
 		<Toast />
 	{/if}
+{/if}
+
+{#if bukaPasang}
+	<PasangLayar bind:open={bukaPasang} />
 {/if}
 
 {#snippet item(t: { href: string; label: string; ikon: string })}

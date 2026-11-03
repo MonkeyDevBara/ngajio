@@ -1,4 +1,6 @@
 import { api, type BalasanAuth } from './sinkron';
+import { app } from './store.svelte';
+import { fotoAman, kecilkanFoto } from './foto';
 
 interface GoogleId {
 	initialize(o: { client_id: string; callback: (r: { credential?: string }) => void }): void;
@@ -26,11 +28,36 @@ function muatSkrip(): Promise<void> {
 	return muatan;
 }
 
+/** Membaca klaim `picture` dari payload ID token. Hanya untuk tampilan, tanpa verifikasi. */
+export function bacaPicture(jwt: string): string | undefined {
+	try {
+		const b64 = jwt.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+		const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+		const p = JSON.parse(new TextDecoder().decode(bytes)).picture;
+		return typeof p === 'string' ? p : undefined;
+	} catch {
+		return undefined;
+	}
+}
+
+/** Foto bawaan dari akun Google bila pengajar belum punya foto. Gagal apa pun: diam, biarkan kosong. */
+export async function isiFotoGoogle(picture?: string) {
+	if (!picture || fotoAman(app.pengajar.foto)) return;
+	try {
+		const u = new URL(picture);
+		if (u.protocol !== 'https:' || !(u.hostname === 'googleusercontent.com' || u.hostname.endsWith('.googleusercontent.com'))) return;
+		const foto = await kecilkanFoto(u.href);
+		if (!fotoAman(app.pengajar.foto)) app.ubahPengajar({ foto });
+	} catch {
+		/* CORS, jaringan, dan sebagainya: abaikan */
+	}
+}
+
 /** Menggambar tombol Google di `el`. Callback mengirim {credential} ke /api/auth/google. */
 export async function pasangGoogle(
 	el: HTMLElement,
 	clientId: string,
-	onMasuk: (r: BalasanAuth) => void,
+	onMasuk: (r: BalasanAuth, picture?: string) => void,
 	onGalat: (e: unknown) => void
 ) {
 	try {
@@ -41,7 +68,7 @@ export async function pasangGoogle(
 			callback: async ({ credential }) => {
 				if (!credential) return;
 				try {
-					onMasuk(await api<BalasanAuth>('/api/auth/google', { credential }));
+					onMasuk(await api<BalasanAuth>('/api/auth/google', { credential }), bacaPicture(credential));
 				} catch (e) {
 					onGalat(e);
 				}

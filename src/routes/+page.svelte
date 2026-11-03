@@ -1,9 +1,10 @@
 <script lang="ts">
-	import { app, sekarang } from '#lib/store.svelte.ts';
-	import { jam, nilaiLabel, tanggal } from '#lib/format.ts';
+	import { app } from '#lib/store.svelte.ts';
+	import { nilaiLabel } from '#lib/format.ts';
 	import { posisiLabel } from '#lib/posisi.ts';
 	import Avatar from '#lib/ui/Avatar.svelte';
 	import Icon from '#lib/ui/Icon.svelte';
+	import Logo from '#lib/ui/Logo.svelte';
 	import SyncChip from '#lib/ui/SyncChip.svelte';
 
 	const hariIni = $derived(app.setoranHariIni());
@@ -33,25 +34,39 @@
 		return { sudah: ang.filter((s) => sudahSetor.has(s.id)).length, total: ang.length };
 	});
 
-	const jamTeks = $derived(jam(sekarang().toISOString()));
+	// Tema efektif: 'otomatis' mengikuti sistem. Tombol membaliknya ke terang/gelap.
+	const gelap = $derived(
+		app.pengajar.tema === 'gelap' ||
+			(app.pengajar.tema === 'otomatis' && window.matchMedia('(prefers-color-scheme: dark)').matches)
+	);
 </script>
 
 <div class="px-4 pt-[max(1rem,env(safe-area-inset-top))] pb-4">
-	<header class="mb-5 flex items-start justify-between gap-3">
-		<div class="min-w-0">
-			<p class="text-sm text-ink-muted">
-				{tanggal(sekarang().toISOString(), { hari: true, tahun: true })} · {jamTeks}
-			</p>
-			<h1 class="mt-0.5 text-[22px] leading-tight font-bold">
-				Assalamu'alaikum, {app.pengajar.nama || 'Ustadz'}
-			</h1>
+	<header class="mb-5 flex items-start justify-between gap-2">
+		<div class="min-w-0 flex-1">
+			<div class="flex min-h-10 flex-wrap items-center gap-x-2 gap-y-1">
+				<Logo size={36} />
+				<span class="text-xl font-extrabold tracking-tight">ngaji<span class="text-gold">o</span></span>
+				<SyncChip />
+			</div>
+			<div class="mt-3 flex items-center justify-between gap-3">
+				<h1 class="min-w-0 text-[22px] leading-tight font-bold">
+					Assalamu'alaikum, {app.pengajar.nama || 'Ustadz'}
+				</h1>
+				<Avatar nama={app.pengajar.nama || 'Ustadz'} foto={app.pengajar.foto} size={56} />
+			</div>
 		</div>
-		<div class="flex shrink-0 items-center gap-1">
-			<SyncChip />
+		<div class="flex shrink-0 flex-col">
 			<a
 				href="/pengaturan"
-				class="flex size-11 items-center justify-center rounded-full text-ink-soft"
+				class="flex size-10 items-center justify-center rounded-full text-ink-soft"
 				aria-label="Pengaturan"><Icon n="sliders" size={22} /></a
+			>
+			<button
+				class="flex size-10 items-center justify-center rounded-full text-ink-soft"
+				aria-label="Ganti tema"
+				onclick={() => app.ubahPengajar({ tema: gelap ? 'terang' : 'gelap' })}
+				><Icon n={gelap ? 'sun' : 'moon'} size={22} /></button
 			>
 		</div>
 	</header>

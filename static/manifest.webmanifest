@@ -1,0 +1,16 @@
+{
+	"name": "Ngajio",
+	"short_name": "Ngajio",
+	"description": "Buku mutaba'ah digital untuk pengajar Al-Qur'an.",
+	"lang": "id",
+	"start_url": "/",
+	"scope": "/",
+	"display": "standalone",
+	"background_color": "#f5f2ea",
+	"theme_color": "#0d6b53",
+	"icons": [
+		{ "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+		{ "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+		{ "src": "/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+	]
+}

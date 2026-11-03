@@ -1,9 +1,14 @@
 package validate
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestRecord(t *testing.T) {
 	const ok = `{"santriId":"s1","kelompokSaatItu":"","jenis":"tahsin","nilai":5,"tag":["a"],"dicatatPada":"2026-11-03T10:00:00+07:00"}`
+	const peng = `{"nama":"A","lembaga":"","skala":"huruf","metodeId":"","arah":"juz30","ambangLulus":3,"tema":"terang","batasHari":"00:00","foto":"%s"}`
+	foto := func(f string) string { return strings.Replace(peng, "%s", f, 1) }
 	cases := []struct {
 		table, id, data string
 		ok              bool
@@ -20,6 +25,10 @@ func TestRecord(t *testing.T) {
 		{"santri", "s1", `{"nama":"A","kelompokId":"k","metodeId":"","arah":"juz30","arsip":false,"hafalAwal":[115]}`, false},
 		{"santri", "s1", `{"nama":"A\u0000","kelompokId":"k","metodeId":"","arah":"juz30","arsip":false,"hafalAwal":[]}`, false},
 		{"nope", "x", `{}`, false},
+		{"pengajar", "me", foto("data:image/jpeg;base64,/9j/4AAQSkZJRg=="), true},
+		{"pengajar", "me", foto("data:image/png;base64,iVBORw0KGgo="), false},
+		{"pengajar", "me", foto("data:image/jpeg;base64," + strings.Repeat("A", maxFoto)), false},
+		{"pengajar", "me", foto("data:image/jpeg;base64,<script>"), false},
 	}
 	for i, c := range cases {
 		_, err := Record(c.table, c.id, []byte(c.data))
