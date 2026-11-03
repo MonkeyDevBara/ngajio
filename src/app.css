@@ -1,0 +1,190 @@
+@import 'tailwindcss';
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Palet Ngajio: hijau tua emerald (tenang, tidak mencolok) + emas sebagai aksen. */
+:root {
+	--paper: #f5f2ea;
+	--surface: #ffffff;
+	--surface-2: #efebe1;
+	--line: #e2dccf;
+	--ink: #16211d;
+	--ink-soft: #4b5a54;
+	--ink-muted: #77847e;
+	--brand: #0d6b53;
+	--brand-strong: #0a5543;
+	--brand-tint: #e3f0ea;
+	--gold: #b8860b;
+	--gold-tint: #f7eed6;
+	--danger: #b3261e;
+	--danger-tint: #fbe9e7;
+	--warn: #9a6a00;
+	--ok: #217a52;
+	--on-brand: #ffffff;
+}
+
+.dark {
+	--paper: #0c1210;
+	--surface: #131c19;
+	--surface-2: #1a2420;
+	--line: #26332e;
+	--ink: #e9efeb;
+	--ink-soft: #b8c4be;
+	--ink-muted: #8b9a93;
+	--brand: #4fbf9b;
+	--brand-strong: #7fd7b9;
+	--brand-tint: #12312a;
+	--gold: #e0b74a;
+	--gold-tint: #2b2413;
+	--danger: #ff8a80;
+	--danger-tint: #321512;
+	--warn: #e2b457;
+	--ok: #63c99c;
+	--on-brand: #06231b;
+}
+
+@theme inline {
+	--color-paper: var(--paper);
+	--color-surface: var(--surface);
+	--color-surface-2: var(--surface-2);
+	--color-line: var(--line);
+	--color-ink: var(--ink);
+	--color-ink-soft: var(--ink-soft);
+	--color-ink-muted: var(--ink-muted);
+	--color-brand: var(--brand);
+	--color-brand-strong: var(--brand-strong);
+	--color-brand-tint: var(--brand-tint);
+	--color-gold: var(--gold);
+	--color-gold-tint: var(--gold-tint);
+	--color-danger: var(--danger);
+	--color-danger-tint: var(--danger-tint);
+	--color-warn: var(--warn);
+	--color-ok: var(--ok);
+	--color-on-brand: var(--on-brand);
+
+	--font-sans:
+		'Plus Jakarta Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+	--font-arabic: 'Amiri', 'Scheherazade New', 'Traditional Arabic', serif;
+
+	--radius-xl2: 1.25rem;
+}
+
+@layer base {
+	html {
+		-webkit-text-size-adjust: 100%;
+		background: var(--paper);
+		color-scheme: light;
+	}
+	.dark html,
+	html.dark {
+		color-scheme: dark;
+	}
+	body {
+		background: var(--paper);
+		color: var(--ink);
+		font-family: var(--font-sans);
+		font-size: 16px;
+		line-height: 1.5;
+		-webkit-font-smoothing: antialiased;
+		text-rendering: optimizeLegibility;
+		overscroll-behavior-y: none;
+	}
+	button,
+	a {
+		-webkit-tap-highlight-color: transparent;
+	}
+	:focus-visible {
+		outline: 2px solid var(--brand);
+		outline-offset: 2px;
+	}
+	.tabular {
+		font-variant-numeric: tabular-nums;
+	}
+	.safe-b {
+		padding-bottom: env(safe-area-inset-bottom, 0px);
+	}
+	.safe-t {
+		padding-top: env(safe-area-inset-top, 0px);
+	}
+	.no-scrollbar::-webkit-scrollbar {
+		display: none;
+	}
+	.no-scrollbar {
+		scrollbar-width: none;
+	}
+}
+
+@keyframes rise {
+	from {
+		opacity: 0;
+		transform: translateY(6px);
+	}
+	to {
+		opacity: 1;
+		transform: none;
+	}
+}
+
+@layer components {
+	.card {
+		@apply rounded-2xl border border-line bg-surface p-4;
+	}
+	.btn {
+		@apply inline-flex min-h-12 select-none items-center justify-center gap-2 rounded-xl px-4 text-[15px] font-semibold transition active:scale-[0.98] disabled:pointer-events-none disabled:opacity-40;
+	}
+	.btn-primary {
+		@apply bg-brand text-on-brand;
+	}
+	.btn-soft {
+		@apply bg-brand-tint text-brand-strong;
+	}
+	.btn-line {
+		@apply border border-line bg-surface text-ink;
+	}
+	.btn-danger {
+		@apply bg-danger-tint text-danger;
+	}
+	.chip {
+		@apply inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold;
+	}
+	.field {
+		@apply min-h-12 w-full rounded-xl border border-line bg-surface px-3.5 text-base text-ink placeholder:text-ink-muted;
+	}
+	.label {
+		@apply mb-1.5 block text-sm font-semibold text-ink-soft;
+	}
+	.rise {
+		animation: rise 0.28s ease both;
+	}
+}
+
+/* Cetak laporan: A4, tanpa navigasi dan kontrol. */
+.print-only {
+	display: none;
+}
+@media print {
+	@page {
+		size: A4;
+		margin: 14mm;
+	}
+	html,
+	body {
+		background: #fff !important;
+		color: #000 !important;
+	}
+	.no-print {
+		display: none !important;
+	}
+	.print-only {
+		display: block !important;
+	}
+	.card {
+		break-inside: avoid;
+		border-color: #cfcfcf !important;
+		background: #fff !important;
+	}
+	.print-wide {
+		max-width: none !important;
+		padding: 0 !important;
+	}
+}
