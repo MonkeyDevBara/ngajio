@@ -357,3 +357,97 @@ func TestTxIsImmediate(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestUpsertLoginUserOverwritesNamaAndEmail(t *testing.T) {
+	s, _ := open(t)
+	now := time.Now()
+	u, created, err := s.UpsertLoginUser(ctx, "g1", "a@b.c", "Ust", now)
+	if err != nil || !created || u.Nama != "Ust" {
+		t.Fatalf("first: %+v %v %v", u, created, err)
+	}
+	u2, created, _ := s.UpsertLoginUser(ctx, "g1", "new@b.c", "Ust Baru", now)
+	if created || u2.ID != u.ID || u2.Email != "new@b.c" || u2.Nama != "Ust Baru" {
+		t.Fatalf("second: %+v", u2)
+	}
+	u3, _, _ := s.UpsertLoginUser(ctx, "g1", "new@b.c", "", now)
+	if u3.Nama != "Ust Baru" {
+		t.Fatalf("an empty name must not erase the cache: %q", u3.Nama)
+	}
+	// the dev path keeps its old rule: nama is only filled when empty
+	u4, _, _ := s.UpsertUser(ctx, "g1", "new@b.c", "Dev", now)
+	if u4.Nama != "Ust Baru" {
+		t.Fatalf("UpsertUser overwrote nama: %q", u4.Nama)
+	}
+}
+
+func TestUserRev(t *testing.T) {
+	s, _ := open(t)
+	u, _, _ := s.UpsertUser(ctx, "r", "a@b.c", "", time.Now())
+	if rev, err := s.UserRev(ctx, u.ID); err != nil || rev != 0 {
+		t.Fatalf("%d %v", rev, err)
+	}
+	s.Tx(ctx, func(tx *sql.Tx) error { _, err := tx.Exec(`UPDATE users SET rev=42 WHERE id=?`, u.ID); return err })
+	if rev, err := s.UserRev(ctx, u.ID); err != nil || rev != 42 {
+		t.Fatalf("%d %v", rev, err)
+	}
+	if _, err := s.UserRev(ctx, 999); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("missing user: %v", err)
+	}
+}
+
+func TestExtendSession(t *testing.T) {
+	s, _ := open(t)
+	now := time.Unix(1_800_000_000, 0)
+	u, _, _ := s.UpsertUser(ctx, "e", "a@b.c", "", now)
+	_, hash, _ := NewToken()
+	s.CreateSession(ctx, u.ID, hash, now)
+	later := now.Add(10 * 24 * time.Hour)
+	newExp := later.Add(SessionTTL)
+
+	// last_seen newer than the bound: nothing happens
+	if ok, err := s.ExtendSession(ctx, hash, newExp, later, now.Add(-time.Hour)); ok || err != nil {
+		t.Fatalf("guarded by last_seen: %v %v", ok, err)
+	}
+	if ok, err := s.ExtendSession(ctx, hash, newExp, later, later.Add(-24*time.Hour)); !ok || err != nil {
+		t.Fatalf("extend: %v %v", ok, err)
+	}
+	_, ss, err := s.LookupSession(ctx, hash, later)
+	if err != nil || ss.ExpiresAt != newExp.Unix() || ss.LastSeen != later.Unix() {
+		t.Fatalf("%+v %v", ss, err)
+	}
+	// never shortens, and a repeat with the same target writes nothing
+	if ok, _ := s.ExtendSession(ctx, hash, newExp, later.Add(48*time.Hour), later.Add(48*time.Hour)); ok {
+		t.Fatal("same expiry written twice")
+	}
+	if ok, _ := s.ExtendSession(ctx, hash, now.Add(time.Hour), later.Add(48*time.Hour), later.Add(48*time.Hour)); ok {
+		t.Fatal("expiry shortened")
+	}
+	// expired session is not revived
+	if ok, _ := s.ExtendSession(ctx, hash, later.Add(90*24*time.Hour), later.Add(40*24*time.Hour), later.Add(40*24*time.Hour)); ok {
+		t.Fatal("expired session revived")
+	}
+	// unknown hash
+	if ok, err := s.ExtendSession(ctx, []byte("nope"), newExp, later, later); ok || err != nil {
+		t.Fatalf("unknown: %v %v", ok, err)
+	}
+}
+
+func TestDeleteExpiredSessions(t *testing.T) {
+	s, _ := open(t)
+	now := time.Unix(1_800_000_000, 0)
+	u, _, _ := s.UpsertUser(ctx, "d", "a@b.c", "", now)
+	_, h1, _ := NewToken()
+	_, h2, _ := NewToken()
+	s.CreateSession(ctx, u.ID, h1, now)
+	s.CreateSession(ctx, u.ID, h2, now.Add(5*24*time.Hour))
+	if n, err := s.DeleteExpiredSessions(ctx, now.Add(SessionTTL-time.Second)); n != 0 || err != nil {
+		t.Fatalf("%d %v", n, err)
+	}
+	// expiry is inclusive: expires_at <= now is gone, which matches LookupSession (expires_at > now)
+	if n, err := s.DeleteExpiredSessions(ctx, now.Add(SessionTTL)); n != 1 || err != nil {
+		t.Fatalf("%d %v", n, err)
+	}
+	if _, _, err := s.LookupSession(ctx, h2, now.Add(SessionTTL)); err != nil {
+		t.Fatalf("second session must remain: %v", err)
+	}
+}

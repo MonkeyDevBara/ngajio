@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -17,7 +18,9 @@ import (
 	"testing"
 	"time"
 
+	"ngajio/server/internal/auth"
 	"ngajio/server/internal/config"
+	"ngajio/server/internal/limit"
 	"ngajio/server/internal/store"
 )
 
@@ -185,7 +188,7 @@ func TestDevLoginCSRF(t *testing.T) {
 
 func TestNotFoundIsJSON(t *testing.T) {
 	srv, _, _ := setup(t, devCfg())
-	for _, c := range [][2]string{{"GET", "/nope"}, {"GET", "/"}, {"GET", "/api/me"}} {
+	for _, c := range [][2]string{{"GET", "/nope"}, {"GET", "/"}, {"GET", "/api/nope"}} {
 		resp, b := req(t, srv, c[0], c[1], "", nil)
 		if resp.StatusCode != 404 || !strings.Contains(string(b), `"not_found"`) {
 			t.Errorf("%v: %d %s", c, resp.StatusCode, b)
@@ -290,5 +293,180 @@ func TestServeReturnsListenerError(t *testing.T) {
 		}
 	case <-time.After(3 * time.Second):
 		t.Fatal("serve hung on listener error")
+	}
+}
+
+// ---- task 2 wiring -----------------------------------------------------------------
+
+// stubVerifier maps a credential to claims, like a fake Google.
+type stubVerifier struct{ claims map[string]auth.Claims }
+
+func (v stubVerifier) Verify(_ context.Context, tok string) (auth.Claims, error) {
+	if c, ok := v.claims[tok]; ok {
+		return c, nil
+	}
+	return auth.Claims{}, &auth.VerifyError{Code: "signature"}
+}
+
+func setupWith(t *testing.T, cfg config.Config, o options) (*httptest.Server, *store.Store, *bytes.Buffer) {
+	t.Helper()
+	st, err := store.Open(filepath.Join(t.TempDir(), "ngajio.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { st.Close() })
+	var logs bytes.Buffer
+	h, _ := buildHandler(cfg, st, log.New(&logs, "", 0), o)
+	srv := httptest.NewServer(h)
+	t.Cleanup(srv.Close)
+	return srv, st, &logs
+}
+
+func cookieHdr(h map[string]string, c *http.Cookie) map[string]string {
+	h["Cookie"] = c.Name + "=" + c.Value
+	return h
+}
+
+func TestGoogleLoginMeLogoutThroughMain(t *testing.T) {
+	cfg := devCfg()
+	cfg.GoogleClientID = "client-123"
+	stub := stubVerifier{claims: map[string]auth.Claims{
+		"good": {Sub: "g-1", Email: "rahasia@example.com", Name: "Nama Rahasia", EmailVerified: true},
+	}}
+	srv, _, logs := setupWith(t, cfg, options{Verifier: stub})
+
+	resp, b := req(t, srv, "POST", "/api/auth/google", `{"credential":"good"}`, good(srv))
+	var lr loginResp
+	json.Unmarshal(b, &lr)
+	if resp.StatusCode != 200 || !lr.Baru || lr.User.Email != "rahasia@example.com" || lr.User.Nama != "Nama Rahasia" || len(resp.Cookies()) != 1 {
+		t.Fatalf("login: %d %s", resp.StatusCode, b)
+	}
+	c := resp.Cookies()[0]
+	resp, b = req(t, srv, "GET", "/api/me", "", cookieHdr(map[string]string{}, c))
+	if resp.StatusCode != 200 || !strings.Contains(string(b), `"cursor":0`) || !strings.Contains(string(b), `"id":`) {
+		t.Fatalf("me: %d %s", resp.StatusCode, b)
+	}
+	if resp, _ = req(t, srv, "GET", "/api/me", "", nil); resp.StatusCode != 401 {
+		t.Fatalf("me without cookie: %d", resp.StatusCode)
+	}
+	resp, b = req(t, srv, "POST", "/api/auth/logout", `{}`, cookieHdr(good(srv), c))
+	if resp.StatusCode != 200 || strings.TrimSpace(string(b)) != `{"ok":true}` || !strings.Contains(resp.Header.Get("Set-Cookie"), "Max-Age=0") {
+		t.Fatalf("logout: %d %s %s", resp.StatusCode, b, resp.Header.Get("Set-Cookie"))
+	}
+	if resp, _ = req(t, srv, "GET", "/api/me", "", cookieHdr(map[string]string{}, c)); resp.StatusCode != 401 {
+		t.Fatalf("me after logout: %d", resp.StatusCode)
+	}
+	resp, b = req(t, srv, "POST", "/api/auth/google", `{"credential":"forged"}`, good(srv))
+	if resp.StatusCode != 401 || !strings.Contains(string(b), `"login failed"`) {
+		t.Fatalf("forged: %d %s", resp.StatusCode, b)
+	}
+	// dev login (DEV_LOGIN is on in devCfg) works next to Google
+	if resp, _ = req(t, srv, "POST", "/api/auth/dev", `{"email":"devrahasia@example.com"}`, good(srv)); resp.StatusCode != 200 {
+		t.Fatalf("dev: %d", resp.StatusCode)
+	}
+	for _, secret := range []string{"rahasia", "Rahasia", "good", "forged", c.Value} {
+		if strings.Contains(logs.String(), secret) {
+			t.Errorf("log contains %q:\n%s", secret, logs)
+		}
+	}
+	if !strings.Contains(logs.String(), "auth: google login rejected code=signature") {
+		t.Errorf("no reject code in log:\n%s", logs)
+	}
+}
+
+func TestGoogleNotConfiguredWithoutClientID(t *testing.T) {
+	srv, _, _ := setup(t, devCfg()) // GoogleClientID empty
+	resp, b := req(t, srv, "POST", "/api/auth/google", `{"credential":"x"}`, good(srv))
+	if resp.StatusCode != 503 || !strings.Contains(string(b), `"not_configured"`) {
+		t.Fatalf("%d %s", resp.StatusCode, b)
+	}
+}
+
+// With a client id and no injected verifier, the real Google verifier is built.
+// Malformed tokens fail before any network access.
+func TestRealVerifierBuiltFromClientID(t *testing.T) {
+	cfg := config.Config{Env: "prod", CookieSecure: true, GoogleClientID: "client-123"}
+	srv, _, _ := setup(t, cfg)
+	for _, body := range []string{`{"credential":"x"}`, `{"credential":"a.b.c"}`, `{"credential":""}`} {
+		resp, b := req(t, srv, "POST", "/api/auth/google", body, good(srv))
+		if resp.StatusCode != 401 {
+			t.Errorf("%s: %d %s", body, resp.StatusCode, b)
+		}
+	}
+}
+
+func TestAuthRateLimitThroughMain(t *testing.T) {
+	cfg := devCfg()
+	cfg.TrustProxyHeader = "X-Real-IP" // config.Load always sets this default
+	srv, _, _ := setupWith(t, cfg, options{Limiter: limit.New(10.0/60, 10)})
+	for i := 1; i <= 10; i++ {
+		if resp, b := req(t, srv, "POST", "/api/auth/logout", `{}`, good(srv)); resp.StatusCode != 200 {
+			t.Fatalf("request %d: %d %s", i, resp.StatusCode, b)
+		}
+	}
+	resp, b := req(t, srv, "POST", "/api/auth/logout", `{}`, good(srv))
+	if resp.StatusCode != 429 || !strings.Contains(string(b), `"rate_limited"`) || resp.Header.Get("Retry-After") == "" {
+		t.Fatalf("11th: %d %s %v", resp.StatusCode, b, resp.Header)
+	}
+	// another client IP behind the (loopback) proxy is unaffected
+	h := good(srv)
+	h["X-Real-IP"] = "198.51.100.7"
+	if resp, _ = req(t, srv, "POST", "/api/auth/logout", `{}`, h); resp.StatusCode != 200 {
+		t.Fatalf("other IP: %d", resp.StatusCode)
+	}
+}
+
+func TestHealthIsNotRateLimited(t *testing.T) {
+	srv, _, _ := setupWith(t, devCfg(), options{Limiter: limit.New(10.0/60, 1)})
+	for i := 0; i < 5; i++ {
+		if resp, _ := req(t, srv, "GET", "/api/health", "", nil); resp.StatusCode != 200 {
+			t.Fatalf("health limited: %d", resp.StatusCode)
+		}
+	}
+}
+
+// When the drain runs out of time, serve closes the connections and reports it.
+func TestServeShutdownTimeout(t *testing.T) {
+	block := make(chan struct{})
+	defer close(block)
+	srv := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { <-block })}
+	ln, _ := net.Listen("tcp", "127.0.0.1:0")
+	stop, cancel := context.WithCancel(context.Background())
+	served := make(chan error, 1)
+	go func() { served <- serve(stop, srv, ln, 200*time.Millisecond) }()
+
+	conn, err := net.Dial("tcp", ln.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	fmt.Fprintf(conn, "GET /x HTTP/1.1\r\nHost: x\r\n\r\n")
+	time.Sleep(100 * time.Millisecond) // the request is in flight and never ends
+	start := time.Now()
+	cancel()
+	select {
+	case err := <-served:
+		if !errors.Is(err, errShutdownTimeout) || time.Since(start) > 3*time.Second {
+			t.Fatalf("err=%v after %v", err, time.Since(start))
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("serve did not return after the drain timeout")
+	}
+	conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	if _, err := conn.Read(make([]byte, 1)); err == nil {
+		t.Error("connection should have been closed")
+	}
+}
+
+func TestServeCleanShutdownReturnsNil(t *testing.T) {
+	srv := &http.Server{Handler: http.NotFoundHandler()}
+	ln, _ := net.Listen("tcp", "127.0.0.1:0")
+	stop, cancel := context.WithCancel(context.Background())
+	served := make(chan error, 1)
+	go func() { served <- serve(stop, srv, ln, time.Second) }()
+	time.Sleep(50 * time.Millisecond)
+	cancel()
+	if err := <-served; err != nil {
+		t.Fatalf("idle shutdown must be clean: %v", err)
 	}
 }

@@ -185,10 +185,25 @@ func (s *Store) Tx(ctx context.Context, fn func(*sql.Tx) error) error {
 // UpsertUser finds the user by sub or creates it. The email is refreshed on
 // every login; nama (display cache) is only filled when still empty.
 func (s *Store) UpsertUser(ctx context.Context, sub, email, nama string, now time.Time) (u User, created bool, err error) {
+	return s.upsertUser(ctx, sub, email, nama, now, false)
+}
+
+// UpsertLoginUser is UpsertUser for logins whose provider is the source of
+// truth (Google): email and a non-empty nama replace the cached values on every
+// login. An empty nama never erases the cached one.
+func (s *Store) UpsertLoginUser(ctx context.Context, sub, email, nama string, now time.Time) (u User, created bool, err error) {
+	return s.upsertUser(ctx, sub, email, nama, now, true)
+}
+
+func (s *Store) upsertUser(ctx context.Context, sub, email, nama string, now time.Time, overwriteNama bool) (u User, created bool, err error) {
 	t := now.Unix()
+	over := 0
+	if overwriteNama {
+		over = 1
+	}
 	err = s.Tx(ctx, func(tx *sql.Tx) error {
-		e := tx.QueryRowContext(ctx, `UPDATE users SET email=?1, nama=CASE WHEN nama='' THEN ?2 ELSE nama END, last_seen=?3
-			WHERE sub=?4 RETURNING id,email,nama,plan`, email, nama, t, sub).Scan(&u.ID, &u.Email, &u.Nama, &u.Plan)
+		e := tx.QueryRowContext(ctx, `UPDATE users SET email=?1, nama=CASE WHEN nama='' OR (?5<>0 AND ?2<>'') THEN ?2 ELSE nama END, last_seen=?3
+			WHERE sub=?4 RETURNING id,email,nama,plan`, email, nama, t, sub, over).Scan(&u.ID, &u.Email, &u.Nama, &u.Plan)
 		if e == nil {
 			return nil
 		}
@@ -200,6 +215,16 @@ func (s *Store) UpsertUser(ctx context.Context, sub, email, nama string, now tim
 			RETURNING id,email,nama,plan`, sub, email, nama, t, t).Scan(&u.ID, &u.Email, &u.Nama, &u.Plan)
 	})
 	return u, created && err == nil, err
+}
+
+// UserRev returns users.rev, the sync cursor of the user.
+func (s *Store) UserRev(ctx context.Context, userID int64) (int64, error) {
+	var rev int64
+	err := s.r.QueryRowContext(ctx, `SELECT rev FROM users WHERE id=?`, userID).Scan(&rev)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, ErrNotFound
+	}
+	return rev, err
 }
 
 // NewToken returns a random session token (32 bytes, base64url, 43 chars) and
@@ -249,4 +274,38 @@ func (s *Store) DeleteSession(ctx context.Context, hash []byte) error {
 		_, err := tx.ExecContext(ctx, `DELETE FROM sessions WHERE token_hash=?`, hash)
 		return err
 	})
+}
+
+// ExtendSession moves the expiry of a session to expiresAt and its last_seen to
+// now, only when the stored expiry is earlier and last_seen is not after
+// seenBefore. The conditions make concurrent callers write once. It reports
+// whether a row changed.
+func (s *Store) ExtendSession(ctx context.Context, hash []byte, expiresAt, now, seenBefore time.Time) (bool, error) {
+	var n int64
+	err := s.Tx(ctx, func(tx *sql.Tx) error {
+		res, err := tx.ExecContext(ctx, `UPDATE sessions SET expires_at=?1, last_seen=?2
+			WHERE token_hash=?3 AND expires_at<?1 AND last_seen<=?4 AND expires_at>?2`,
+			expiresAt.Unix(), now.Unix(), hash, seenBefore.Unix())
+		if err != nil {
+			return err
+		}
+		n, err = res.RowsAffected()
+		return err
+	})
+	return n > 0, err
+}
+
+// DeleteExpiredSessions removes sessions that expired at or before now and
+// returns how many.
+func (s *Store) DeleteExpiredSessions(ctx context.Context, now time.Time) (int64, error) {
+	var n int64
+	err := s.Tx(ctx, func(tx *sql.Tx) error {
+		res, err := tx.ExecContext(ctx, `DELETE FROM sessions WHERE expires_at<=?`, now.Unix())
+		if err != nil {
+			return err
+		}
+		n, err = res.RowsAffected()
+		return err
+	})
+	return n, err
 }

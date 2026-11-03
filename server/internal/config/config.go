@@ -85,10 +85,20 @@ func validListen(addr string) error {
 	if err != nil {
 		return fmt.Errorf("LISTEN=%q is not host:port", addr)
 	}
-	if n, err := strconv.Atoi(port); err != nil || n < 1 || n > 65535 {
+	// Digits only: Atoi alone would accept "+80", and " 80" must fail too.
+	if n, err := strconv.Atoi(port); err != nil || !allDigits(port) || n < 1 || n > 65535 {
 		return fmt.Errorf("LISTEN=%q has an invalid port (use 1 to 65535)", addr)
 	}
 	return nil
+}
+
+func allDigits(s string) bool {
+	for i := 0; i < len(s); i++ {
+		if s[i] < '0' || s[i] > '9' {
+			return false
+		}
+	}
+	return s != ""
 }
 
 // loopbackListen reports whether the host part of addr is localhost or a

@@ -101,7 +101,7 @@ func TestAllowedOrigins(t *testing.T) {
 }
 
 func TestListenValidatedAtLoad(t *testing.T) {
-	bad := []string{"127.0.0.1:99999", "127.0.0.1:0", "127.0.0.1:-1", "127.0.0.1:http", "127.0.0.1", "127.0.0.1:", "nonsense", ":65536"}
+	bad := []string{"127.0.0.1:99999", "127.0.0.1:0", "127.0.0.1:-1", "127.0.0.1:+80", "127.0.0.1: 80", "127.0.0.1:8 0", "127.0.0.1:\t80", "127.0.0.1:0x50", "127.0.0.1:http", "127.0.0.1", "127.0.0.1:", "nonsense", ":65536"}
 	for _, l := range bad {
 		if _, err := load(map[string]string{"LISTEN": l}); err == nil {
 			t.Errorf("LISTEN=%q should fail at load", l)
@@ -114,5 +114,16 @@ func TestListenValidatedAtLoad(t *testing.T) {
 	}
 	if _, err := load(map[string]string{"ENV": "dev", "DEV_LOGIN": "1", "LISTEN": "127.0.0.1:99999"}); err == nil {
 		t.Error("dev login with bad port should fail")
+	}
+}
+
+func TestValidListenDigitsOnly(t *testing.T) {
+	for _, l := range []string{"127.0.0.1:+80", "127.0.0.1: 80", "127.0.0.1:80 ", "127.0.0.1:-80", "[::1]:+8787"} {
+		if validListen(l) == nil {
+			t.Errorf("validListen(%q) should fail", l)
+		}
+	}
+	if validListen("127.0.0.1:080") != nil || validListen("127.0.0.1:80") != nil {
+		t.Error("plain digits must pass")
 	}
 }

@@ -396,3 +396,50 @@ func TestPanicLogHasNoPersonalData(t *testing.T) {
 		}
 	}
 }
+
+func TestClientIP(t *testing.T) {
+	mk := func(remote string, hdr ...string) *http.Request {
+		r := httptest.NewRequest("GET", "/", nil)
+		r.RemoteAddr = remote
+		for i := 0; i+1 < len(hdr); i += 2 {
+			r.Header.Add(hdr[i], hdr[i+1])
+		}
+		return r
+	}
+	cases := []struct {
+		name string
+		r    *http.Request
+		want string
+	}{
+		{"direct peer, no header", mk("203.0.113.5:4000"), "203.0.113.5"},
+		{"spoofed header from public peer ignored", mk("203.0.113.5:4000", "X-Real-IP", "1.2.3.4"), "203.0.113.5"},
+		{"spoofed header from private peer ignored", mk("10.0.0.7:4000", "X-Real-IP", "1.2.3.4"), "10.0.0.7"},
+		{"loopback peer trusts header", mk("127.0.0.1:4000", "X-Real-IP", "198.51.100.9"), "198.51.100.9"},
+		{"loopback v6 peer trusts header", mk("[::1]:4000", "X-Real-IP", "198.51.100.9"), "198.51.100.9"},
+		{"v4-mapped loopback peer trusts header", mk("[::ffff:127.0.0.1]:4000", "X-Real-IP", "198.51.100.9"), "198.51.100.9"},
+		{"loopback without header", mk("127.0.0.1:4000"), "127.0.0.1"},
+		{"loopback, junk header", mk("127.0.0.1:4000", "X-Real-IP", "not-an-ip"), "127.0.0.1"},
+		{"loopback, empty header", mk("127.0.0.1:4000", "X-Real-IP", ""), "127.0.0.1"},
+		{"loopback, ip with port is not an ip", mk("127.0.0.1:4000", "X-Real-IP", "1.2.3.4:80"), "127.0.0.1"},
+		{"loopback, list uses last entry", mk("127.0.0.1:4000", "X-Real-IP", "6.6.6.6, 198.51.100.9"), "198.51.100.9"},
+		{"loopback, two header lines use last", mk("127.0.0.1:4000", "X-Real-IP", "6.6.6.6", "X-Real-IP", "198.51.100.9"), "198.51.100.9"},
+		{"loopback, v6 header", mk("127.0.0.1:4000", "X-Real-IP", "2001:db8::1"), "2001:db8::1"},
+		{"loopback, v4-mapped header unmapped", mk("127.0.0.1:4000", "X-Real-IP", "::ffff:198.51.100.9"), "198.51.100.9"},
+		{"loopback, zone dropped", mk("127.0.0.1:4000", "X-Real-IP", "fe80::1%eth0"), "fe80::1"},
+		{"peer without port", mk("203.0.113.5"), "203.0.113.5"},
+		{"peer not an IP", mk("@"), "@"},
+	}
+	for _, c := range cases {
+		if got := ClientIP(c.r, "X-Real-IP"); got != c.want {
+			t.Errorf("%s: got %q want %q", c.name, got, c.want)
+		}
+	}
+	// the header name is configurable, and an empty name disables trust
+	r := mk("127.0.0.1:1", "X-Forwarded-For", "198.51.100.9", "X-Real-IP", "6.6.6.6")
+	if got := ClientIP(r, "X-Forwarded-For"); got != "198.51.100.9" {
+		t.Errorf("custom header: %q", got)
+	}
+	if got := ClientIP(r, ""); got != "127.0.0.1" {
+		t.Errorf("no trust header: %q", got)
+	}
+}
