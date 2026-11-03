@@ -13,15 +13,19 @@
 
 	onMount(() => {
 		app.muat();
+		app.mulaiSinkron();
 		// Minta Chrome tidak menghapus data lokal saat penyimpanan sesak.
 		navigator.storage?.persist?.();
 		const naik = () => app.setOnline(true);
 		const turun = () => app.setOnline(false);
+		const tampil = () => document.visibilityState === 'visible' && app.picuSinkron();
 		window.addEventListener('online', naik);
 		window.addEventListener('offline', turun);
+		document.addEventListener('visibilitychange', tampil);
 		return () => {
 			window.removeEventListener('online', naik);
 			window.removeEventListener('offline', turun);
+			document.removeEventListener('visibilitychange', tampil);
 		};
 	});
 
@@ -75,6 +79,15 @@
 				<Icon n="wifiOff" size={16} />
 				<span>Tanpa sinyal. Setoran tetap tersimpan di HP dan terkirim saat online.</span>
 			</div>
+		{/if}
+		{#if !penuh && app.sesiBerakhir}
+			<a
+				href="/masuk"
+				class="no-print flex items-center gap-2 bg-danger-tint px-4 py-2.5 text-sm font-semibold text-danger"
+			>
+				<Icon n="alert" size={16} />
+				<span>Sesi berakhir, masuk lagi. Data di HP ini aman.</span>
+			</a>
 		{/if}
 		{#if !penuh && app.statusSinkron === 'gagal'}
 			<div class="no-print space-y-2 bg-danger-tint px-4 py-3 text-sm text-danger">

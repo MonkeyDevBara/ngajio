@@ -13,7 +13,6 @@
 	let lembaga = $state(app.pengajar.lembaga);
 	let bukaPaket = $state(false);
 	let bukaKeluar = $state(false);
-	let bukaHapus = $state(false);
 
 	const p = $derived(app.pengajar);
 	const setoranBaru = $derived(app.setoranAktif.length - app.ekspor.jumlah);
@@ -155,23 +154,18 @@
 			<div class="flex-1">
 				<p class="font-semibold capitalize">{app.statusSinkron}</p>
 				<p class="text-xs text-ink-muted">
-					{app.antrian ? `${app.antrian} perubahan menunggu dikirim` : app.sinkronTerakhir ? `Terakhir ${tanggal(app.sinkronTerakhir, { jam: true })}` : 'Semua data tersimpan di HP ini'}
+					{app.mode === 'contoh'
+						? 'Mode contoh: data hanya ada di HP ini'
+						: app.sesiBerakhir
+							? 'Sesi berakhir, masuk lagi untuk melanjutkan'
+							: `${app.antrian ? `${app.antrian} perubahan menunggu dikirim. ` : ''}${app.sinkronTerakhir ? `Terakhir ${tanggal(app.sinkronTerakhir, { jam: true })}` : 'Belum pernah sinkron'}`}
 				</p>
 			</div>
-			{#if app.statusSinkron === 'gagal'}
+			{#if app.sesiBerakhir}
+				<a class="btn btn-soft min-h-11 px-3 text-sm" href="/masuk">Masuk lagi</a>
+			{:else if app.statusSinkron === 'gagal'}
 				<button class="btn btn-soft min-h-11 px-3 text-sm" onclick={() => app.cobaLagiSinkron()}>Coba lagi</button>
 			{/if}
-		</div>
-		<div class="rounded-xl bg-surface-2 p-3">
-			<p class="mb-2 text-xs font-semibold text-ink-soft">Simulasi (untuk uji tampilan)</p>
-			<label class="flex min-h-11 items-center justify-between text-sm">
-				<span>Tanpa sinyal</span>
-				<input type="checkbox" class="size-5 accent-[var(--brand)]" checked={app.simOffline} onchange={(e) => { app.simOffline = e.currentTarget.checked; if (!app.simOffline) app.jadwalSinkron(); }} />
-			</label>
-			<label class="flex min-h-11 items-center justify-between text-sm">
-				<span>Sinkron gagal</span>
-				<input type="checkbox" class="size-5 accent-[var(--brand)]" checked={app.simGagal} onchange={(e) => { app.simGagal = e.currentTarget.checked; if (!app.simGagal) app.cobaLagiSinkron(); }} />
-			</label>
 		</div>
 	</section>
 
@@ -211,8 +205,9 @@
 	<section class="card space-y-2">
 		<h2 class="mb-1 font-bold">Akun</h2>
 		<button class="btn btn-line w-full justify-start" onclick={() => (bukaKeluar = true)}><Icon n="logout" size={18} />Keluar</button>
-		<button class="btn btn-danger w-full justify-start" onclick={() => (bukaHapus = true)}><Icon n="trash" size={18} />Hapus akun</button>
-		<button class="btn btn-line w-full justify-start text-ink-soft" onclick={() => { app.muatUlangContoh(); app.tampilToast('Data contoh dimuat ulang'); }}><Icon n="refresh" size={18} />Muat ulang data contoh</button>
+		{#if app.mode === 'contoh'}
+			<button class="btn btn-line w-full justify-start text-ink-soft" onclick={() => { app.muatUlangContoh(); app.tampilToast('Data contoh dimuat ulang'); }}><Icon n="refresh" size={18} />Muat ulang data contoh</button>
+		{/if}
 	</section>
 
 	<p class="pb-2 text-center text-xs text-ink-muted">Ngajio v0.1 · {tanggal(sekarang().toISOString(), { tahun: true })}</p>
@@ -236,7 +231,7 @@
 </Sheet>
 
 <Sheet bind:open={bukaKeluar} judul="Keluar dari Ngajio?">
-	<p class="text-sm text-ink-soft">Data di HP ini akan dihapus setelah Anda keluar.</p>
+	<p class="text-sm text-ink-soft">Data di HP ini akan dihapus setelah Anda keluar.{#if app.mode === 'akun'} Data yang sudah tersinkron tetap ada di server dan kembali saat Anda masuk lagi.{/if}</p>
 	{#if app.statusSinkron !== 'tersinkron'}
 		<p class="mt-3 flex gap-2 rounded-xl bg-danger-tint p-3 text-sm text-danger" role="alert">
 			<Icon n="alert" size={18} class="mt-0.5 shrink-0" />Ada {app.antrian || 'beberapa'} perubahan yang belum tersinkron. Ekspor cadangan dulu agar tidak hilang.
@@ -245,16 +240,5 @@
 	<div class="mt-5 grid grid-cols-2 gap-2">
 		<button class="btn btn-line" onclick={() => (bukaKeluar = false)}>Batal</button>
 		<button class="btn btn-danger" onclick={keluar}>Keluar</button>
-	</div>
-</Sheet>
-
-<Sheet bind:open={bukaHapus} judul="Hapus akun?">
-	<p class="text-sm text-ink-soft">
-		Semua data santri, kelompok, dan setoran akan dihapus permanen setelah masa tenggang 30 hari. Selama masa itu Anda bisa masuk lagi untuk membatalkan.
-	</p>
-	<p class="mt-2 text-sm text-ink-soft">Disarankan ekspor data lebih dulu.</p>
-	<div class="mt-5 grid grid-cols-2 gap-2">
-		<button class="btn btn-line" onclick={() => (bukaHapus = false)}>Batal</button>
-		<button class="btn btn-danger" onclick={() => { bukaHapus = false; keluar(); }}>Hapus akun</button>
 	</div>
 </Sheet>

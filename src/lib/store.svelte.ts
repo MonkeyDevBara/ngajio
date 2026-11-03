@@ -1,6 +1,9 @@
 import { JUZ30_REVERSE, SURAHS, surah } from './quran';
 import { KELOMPOK, METODE, PENGAJAR, SANTRI, SETORAN, TARGET, TODAY } from './mock';
 import { daysAgo, hariKey } from './format';
+import * as sinkron from './sinkron';
+import { api } from './sinkron';
+import type { Data, Host, Perubahan, PenggunaAuth } from './sinkron';
 import type {
 	Arah,
 	Jenis,
@@ -17,6 +20,8 @@ import type {
 const KUNCI = 'ngajio:v1';
 /** Penanda layar sambutan sudah dilihat. Terpisah agar tetap ada setelah keluar. */
 const KUNCI_INTRO = 'ngajio:intro';
+/** Keadaan mesin sinkron (lihat sinkron.ts). Dihapus saat keluar. */
+const KUNCI_SINKRON = 'ngajio:sync:v1';
 export const BATAS_GRATIS = 50;
 const AYAT_PER_JUZ = 6236 / 30;
 const JENDELA_EDIT_HARI = 7;
@@ -81,6 +86,9 @@ export interface ToastData {
 
 interface Simpanan {
 	v: 1;
+	/** Aditif: tanpa mode berarti data lama (lihat muat). */
+	mode?: 'contoh' | 'akun';
+	akunSub?: string;
 	sesi: boolean;
 	onboarded: boolean;
 	pengajar: Pengajar;
@@ -109,18 +117,34 @@ class Toko {
 		jumlah: SETORAN.length
 	});
 
-	/* Sinkronisasi (simulasi UI; backend belum tersambung). */
+	/** 'contoh': data lokal saja, tidak pernah disinkron. 'akun': tersinkron ke server. */
+	mode = $state<'contoh' | 'akun'>('contoh');
+	akunSub = $state<string | undefined>(undefined);
+
+	/* Sinkronisasi: diisi mesin di sinkron.ts lewat `host`. */
 	online = $state(true);
-	simOffline = $state(false);
-	simGagal = $state(false);
 	antrian = $state(0);
 	gagal = $state(false);
+	sibuk = $state(false);
+	sesiBerakhir = $state(false);
 	sinkronTerakhir = $state<string | null>(null);
 
 	toast = $state<ToastData | null>(null);
 	private toastSeq = 0;
 	private toastTimer: ReturnType<typeof setTimeout> | undefined;
-	private sinkronTimer: ReturnType<typeof setTimeout> | undefined;
+
+	private host: Host = {
+		potret: () => this.potret(),
+		terapkan: (c) => this.terapkanDariServer(c),
+		status: (s) => {
+			this.antrian = s.antrian;
+			this.sibuk = s.sibuk;
+			this.gagal = s.gagal;
+			this.sesiBerakhir = s.sesiBerakhir;
+			this.sinkronTerakhir = s.tglSinkron;
+		},
+		toast: (p) => this.tampilToast(p)
+	};
 
 	/* ---------- Turunan ---------- */
 
@@ -140,11 +164,12 @@ class Toko {
 	});
 
 	get efektifOnline() {
-		return this.online && !this.simOffline;
+		return this.online;
 	}
 	get statusSinkron(): 'tersinkron' | 'menunggu' | 'gagal' {
+		if (this.mode === 'contoh') return 'tersinkron';
 		if (this.gagal) return 'gagal';
-		if (!this.efektifOnline || this.antrian > 0) return 'menunggu';
+		if (!this.efektifOnline || this.antrian > 0 || this.sibuk) return 'menunggu';
 		return 'tersinkron';
 	}
 	get gratis() {
@@ -170,6 +195,9 @@ class Toko {
 			if (raw) {
 				const d = JSON.parse(raw) as Simpanan;
 				if (d.v === 1) {
+					// Data lama tanpa mode: contoh bila email-nya email mock, selain itu akun.
+					this.mode = d.mode ?? (d.pengajar?.email === PENGAJAR.email ? 'contoh' : 'akun');
+					this.akunSub = d.akunSub;
 					this.sesi = d.sesi;
 					this.onboarded = d.onboarded;
 					this.pengajar = { ...clone(PENGAJAR), ...d.pengajar };
@@ -195,20 +223,28 @@ class Toko {
 		this.siap = true;
 	}
 
-	private simpan() {
-		if (typeof localStorage === 'undefined') return;
-		const d: Simpanan = {
-			v: 1,
-			sesi: this.sesi,
-			onboarded: this.onboarded,
+	private potret() {
+		return {
 			pengajar: $state.snapshot(this.pengajar),
 			metode: $state.snapshot(this.metode),
 			kelompok: $state.snapshot(this.kelompok),
 			santri: $state.snapshot(this.santri),
 			setoran: $state.snapshot(this.setoran),
-			target: $state.snapshot(this.target),
-			ekspor: $state.snapshot(this.ekspor)
+			target: $state.snapshot(this.target)
 		};
+	}
+
+	private simpan(data: Data = this.potret()) {
+		if (typeof localStorage === 'undefined') return;
+		const d: Simpanan = {
+			v: 1,
+			mode: this.mode,
+			akunSub: this.akunSub,
+			sesi: this.sesi,
+			onboarded: this.onboarded,
+			...data,
+			ekspor: $state.snapshot(this.ekspor)
+		} as Simpanan;
 		try {
 			localStorage.setItem(KUNCI, JSON.stringify(d));
 		} catch {
@@ -218,33 +254,66 @@ class Toko {
 
 	/** Dipanggil setiap perubahan: simpan lokal, antre untuk sinkron. */
 	private ubah() {
-		this.antrian += 1;
-		this.simpan();
-		this.jadwalSinkron();
+		const d = this.potret();
+		this.simpan(d);
+		if (this.mode === 'akun') sinkron.ubahan(d);
 	}
 
-	jadwalSinkron() {
-		clearTimeout(this.sinkronTimer);
-		if (!this.efektifOnline) return;
-		this.sinkronTimer = setTimeout(() => {
-			if (this.simGagal) {
-				this.gagal = true;
-				return;
-			}
-			this.antrian = 0;
-			this.gagal = false;
-			this.sinkronTerakhir = sekarang().toISOString();
-		}, 1200);
+	/** Dipanggil saat aplikasi dibuka (layout) dan setelah masuk. Contoh tidak pernah sinkron. */
+	mulaiSinkron() {
+		if (this.mode === 'akun' && this.sesi && this.akunSub) sinkron.mulai(this.host, this.akunSub);
 	}
 
 	cobaLagiSinkron() {
-		this.gagal = false;
-		this.jadwalSinkron();
+		sinkron.cobaLagi();
 	}
 
+	/** Dipanggil layout untuk event online dan offline. */
 	setOnline(v: boolean) {
 		this.online = v;
-		if (v) this.jadwalSinkron();
+		if (v && this.mode === 'akun') sinkron.picu();
+	}
+	picuSinkron() {
+		if (this.mode === 'akun') sinkron.picu();
+	}
+
+	/** Terapkan perubahan tarikan ke store tanpa memicu sinkron balik. */
+	terapkanDariServer(changes: Perubahan[]) {
+		const per = new Map<string, Perubahan[]>();
+		for (const c of changes) {
+			const l = per.get(c.t);
+			if (l) l.push(c);
+			else per.set(c.t, [c]);
+		}
+		for (const c of per.get('pengajar') ?? []) {
+			if (!c.hapus && c.data) this.pengajar = { ...this.pengajar, ...(c.data as Partial<Pengajar>) };
+		}
+		const gabung = <T extends { id: string }>(arr: T[], cs: Perubahan[] | undefined): T[] => {
+			if (!cs) return arr;
+			const out = [...arr];
+			const idx = new Map(out.map((r, i) => [r.id, i]));
+			const buang = new Set<string>();
+			for (const c of cs) {
+				if (c.hapus) {
+					buang.add(c.id);
+					continue;
+				}
+				buang.delete(c.id);
+				const r = { ...c.data, id: c.id } as unknown as T;
+				const i = idx.get(c.id);
+				if (i == null) {
+					idx.set(c.id, out.length);
+					out.push(r);
+				} else out[i] = r;
+			}
+			return buang.size ? out.filter((r) => !buang.has(r.id)) : out;
+		};
+		this.metode = gabung(this.metode, per.get('metode'));
+		this.kelompok = gabung(this.kelompok, per.get('kelompok'));
+		this.santri = gabung(this.santri, per.get('santri'));
+		this.setoran = gabung(this.setoran, per.get('setoran'));
+		this.target = gabung(this.target, per.get('target'));
+		this.simpan();
 	}
 
 	tampilToast(pesan: string, aksi?: { label: string; fn: () => void }) {
@@ -296,34 +365,77 @@ class Toko {
 		if (typeof localStorage !== 'undefined') localStorage.setItem(KUNCI_INTRO, '1');
 	}
 
-	/** Masuk sebagai pengajar baru: data kosong, lanjut ke setup. */
-	masukBaru(email: string) {
-		this.isiKosong(email);
+	/**
+	 * Masuk dengan akun server (aturan login pertama, docs/API.md). Melempar bila tarikan
+	 * gagal; saat itu data lokal tidak disentuh.
+	 */
+	async masukAkun(user: PenggunaAuth) {
+		const sub = String(user.id);
+		const sama = this.mode === 'akun' && this.sesi && this.akunSub === sub;
+		if (!sama) {
+			const akunLain = this.mode === 'akun' && !!this.akunSub && this.akunSub !== sub;
+			if (akunLain && this.antrian > 0) {
+				throw new Error(
+					'Ada perubahan akun sebelumnya di HP ini yang belum terkirim. Masuk dengan akun itu lagi, atau keluar lewat Pengaturan.'
+				);
+			}
+			// Data contoh tidak pernah diunggah. Data akun lama (tanpa akunSub) diunggah bila server kosong.
+			const lokalNyata =
+				this.mode === 'akun' && !akunLain && (this.santri.length > 0 || this.setoran.length > 0);
+			const tarik = await sinkron.tarikSemua();
+			if (tarik.changes.length) {
+				this.isiKosong(user.email);
+				this.metode = [];
+				this.terapkanDariServer(tarik.changes);
+				if (!this.metode.length) this.metode = clone(METODE);
+				this.onboarded = this.pengajar.nama !== '';
+				this.ekspor = { terakhir: null, jumlah: this.setoranAktif.length };
+				sinkron.inisialisasi(sub, tarik.cursor, tarik.changes);
+			} else if (lokalNyata) {
+				sinkron.inisialisasi(sub, tarik.cursor, []);
+			} else {
+				this.isiKosong(user.email);
+				this.onboarded = false;
+				sinkron.inisialisasi(sub, tarik.cursor, []);
+			}
+			this.mode = 'akun';
+			this.akunSub = sub;
+		}
+		this.pengajar = { ...this.pengajar, email: user.email, plan: user.plan };
 		this.sesi = true;
-		this.onboarded = false;
 		this.simpan();
+		this.mulaiSinkron();
 	}
 
-	/** Masuk dengan data contoh (28 santri, 42 hari riwayat). */
+	/** Masuk dengan data contoh (28 santri, 42 hari riwayat). Tidak pernah sinkron. */
 	masukContoh() {
+		sinkron.berhenti();
 		this.isiContoh();
+		this.mode = 'contoh';
+		this.akunSub = undefined;
 		this.sesi = true;
 		this.onboarded = true;
 		this.simpan();
 	}
 
 	muatUlangContoh() {
-		this.isiContoh();
-		this.sesi = true;
-		this.onboarded = true;
-		this.simpan();
+		this.masukContoh();
 	}
 
 	keluar() {
+		if (this.mode === 'akun') api('/api/auth/logout', {}).catch(() => {});
+		sinkron.hapusSimpanan();
 		this.isiContoh();
+		this.mode = 'contoh';
+		this.akunSub = undefined;
+		this.sesiBerakhir = false;
+		this.sinkronTerakhir = null;
 		this.sesi = false;
 		this.onboarded = false;
-		if (typeof localStorage !== 'undefined') localStorage.removeItem(KUNCI);
+		if (typeof localStorage !== 'undefined') {
+			localStorage.removeItem(KUNCI);
+			localStorage.removeItem(KUNCI_SINKRON);
+		}
 	}
 
 	selesaikanSetup(p: {

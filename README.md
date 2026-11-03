@@ -1,3 +1,15 @@
+# Ngajio
+
+## Coba lokal
+
+```sh
+npm install
+npm run dev:all   # backend Go di 127.0.0.1:8787 dan UI di http://127.0.0.1:5173 (Ctrl-C menghentikan keduanya)
+# buka http://127.0.0.1:5173/masuk lalu pakai tombol "Masuk dev (lokal)"
+```
+
+Butuh Go terpasang. Data lokal backend ada di `server/data/` (tidak masuk git). Jalankan terpisah dengan `npm run dev:api` dan `npm run dev -- --host 127.0.0.1 --port 5173`.
+
 # sv
 
 Everything you need to build a Svelte project, powered by [`sv`](https://github.com/sveltejs/cli).

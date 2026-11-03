@@ -4,6 +4,11 @@ import { sveltekit } from '@sveltejs/kit/vite';
 import { defineConfig } from 'vite';
 
 export default defineConfig({
+	server: {
+		// Satu origin dengan UI supaya cookie dan pemeriksaan Origin backend jalan.
+		// changeOrigin false: header Host tetap host dev, sama dengan Origin browser.
+		proxy: { '/api': { target: 'http://127.0.0.1:8787', changeOrigin: false } }
+	},
 	plugins: [
 		tailwindcss(),
 		sveltekit({
