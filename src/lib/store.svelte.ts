@@ -23,6 +23,8 @@ const KUNCI_INTRO = 'ngajio:intro';
 /** Keadaan mesin sinkron (lihat sinkron.ts). Dihapus saat keluar. */
 const KUNCI_SINKRON = 'ngajio:sync:v1';
 export const BATAS_GRATIS = 50;
+/** Batas pergantian hari tetap tengah malam (Asia/Jakarta); tidak lagi bisa diatur. */
+const BATAS_HARI = '00:00';
 const AYAT_PER_JUZ = 6236 / 30;
 const JENDELA_EDIT_HARI = 7;
 
@@ -120,6 +122,8 @@ class Toko {
 	/** 'contoh': data lokal saja, tidak pernah disinkron. 'akun': tersinkron ke server. */
 	mode = $state<'contoh' | 'akun'>('contoh');
 	akunSub = $state<string | undefined>(undefined);
+	/** Sekali pakai (tidak disimpan): tawarkan 'pasang di layar utama' setelah masuk. */
+	tawarkanPasang = $state(false);
 
 	/* Sinkronisasi: diisi mesin di sinkron.ts lewat `host`. */
 	online = $state(true);
@@ -182,7 +186,7 @@ class Toko {
 		return this.setoranAktif.length - this.ekspor.jumlah > 50;
 	}
 	get batasMenit() {
-		const [h, m] = this.pengajar.batasHari.split(':').map(Number);
+		const [h, m] = BATAS_HARI.split(':').map(Number);
 		return (h || 0) * 60 + (m || 0);
 	}
 
@@ -286,7 +290,9 @@ class Toko {
 			else per.set(c.t, [c]);
 		}
 		for (const c of per.get('pengajar') ?? []) {
-			if (!c.hapus && c.data) this.pengajar = { ...this.pengajar, ...(c.data as Partial<Pengajar>) };
+			// foto opsional: record server mengganti seluruhnya, jadi foto lokal ikut hilang bila tidak ada.
+			if (!c.hapus && c.data)
+				this.pengajar = { ...this.pengajar, foto: undefined, ...(c.data as Partial<Pengajar>) };
 		}
 		const gabung = <T extends { id: string }>(arr: T[], cs: Perubahan[] | undefined): T[] => {
 			if (!cs) return arr;
@@ -403,6 +409,7 @@ class Toko {
 		}
 		this.pengajar = { ...this.pengajar, email: user.email, plan: user.plan };
 		this.sesi = true;
+		this.tawarkanPasang = true;
 		this.simpan();
 		this.mulaiSinkron();
 	}

@@ -4,6 +4,8 @@
 	import { eksporCSV, eksporJSON } from '#lib/ekspor.ts';
 	import { nilaiLabel, rupiah, tanggal } from '#lib/format.ts';
 	import type { Arah, SkalaJenis, Tema } from '#lib/types.ts';
+	import { fotoAman, fotoDariBerkas } from '#lib/foto.ts';
+	import Avatar from '#lib/ui/Avatar.svelte';
 	import Icon from '#lib/ui/Icon.svelte';
 	import PageHeader from '#lib/ui/PageHeader.svelte';
 	import Progress from '#lib/ui/Progress.svelte';
@@ -13,6 +15,7 @@
 	let lembaga = $state(app.pengajar.lembaga);
 	let bukaPaket = $state(false);
 	let bukaKeluar = $state(false);
+	let inputFoto = $state<HTMLInputElement>();
 
 	const p = $derived(app.pengajar);
 	const setoranBaru = $derived(app.setoranAktif.length - app.ekspor.jumlah);
@@ -21,6 +24,23 @@
 		if (nama.trim() !== p.nama || lembaga.trim() !== p.lembaga)
 			app.ubahPengajar({ nama: nama.trim(), lembaga: lembaga.trim() });
 	}
+
+	async function pilihFoto(e: Event & { currentTarget: HTMLInputElement }) {
+		const f = e.currentTarget.files?.[0];
+		e.currentTarget.value = '';
+		if (!f) return;
+		if (!f.type.startsWith('image/')) return app.tampilToast('Pilih berkas gambar, misalnya JPG atau PNG.');
+		try {
+			app.ubahPengajar({ foto: await fotoDariBerkas(f) });
+		} catch {
+			app.tampilToast('Foto tidak bisa dibaca. Coba gambar lain.');
+		}
+	}
+
+	// Paket aktif: gratis, atau tingkat berbayar menurut jumlah santri aktif.
+	const aktifIdx = $derived(
+		app.gratis ? 0 : app.santriAktif.length <= 150 ? 1 : app.santriAktif.length <= 400 ? 2 : 3
+	);
 
 	const SKALA: [SkalaJenis, string][] = [
 		['huruf', 'Huruf'],
@@ -40,8 +60,8 @@
 	const TIER = [
 		{ nama: 'Gratis', batas: 'Sampai 50 santri', harga: 0, isi: 'Semua fitur input, laporan dasar, PDF tanpa kop' },
 		{ nama: '51–150 santri', batas: 'Sampai 150 santri', harga: 99000, isi: 'Peta hafalan 30 juz, PDF berkop pengajar' },
-		{ nama: '151–400 santri', batas: 'Sampai 400 santri', harga: 179000, isi: 'Semua fitur paket sebelumnya' },
-		{ nama: 'Di atas 400 santri', batas: 'Tanpa batas', harga: 299000, isi: 'Prioritas dukungan' }
+		{ nama: '151–400 santri', batas: 'Sampai 400 santri', harga: 249000, isi: 'Semua fitur paket sebelumnya' },
+		{ nama: 'Di atas 400 santri', batas: 'Tanpa batas', harga: 399000, isi: 'Prioritas dukungan' }
 	];
 
 	function ambilNilai(v: number) {
@@ -60,6 +80,16 @@
 <div class="space-y-5 px-4 pb-10">
 	<section class="card space-y-4">
 		<h2 class="font-bold">Profil</h2>
+		<div class="flex items-center gap-4">
+			<Avatar nama={p.nama || 'Ustadz'} foto={p.foto} size={72} />
+			<div class="flex flex-wrap gap-2">
+				<button class="btn btn-soft min-h-11 px-3 text-sm" onclick={() => inputFoto?.click()}>Ganti foto</button>
+				{#if fotoAman(p.foto)}
+					<button class="btn btn-line min-h-11 px-3 text-sm" onclick={() => app.ubahPengajar({ foto: undefined })}>Hapus foto</button>
+				{/if}
+			</div>
+			<input bind:this={inputFoto} type="file" accept="image/*" class="hidden" onchange={pilihFoto} />
+		</div>
 		<div>
 			<label class="label" for="pn">Nama</label>
 			<input id="pn" class="field" bind:value={nama} onblur={simpanProfil} autocomplete="off" />
@@ -128,12 +158,7 @@
 	</section>
 
 	<section class="card space-y-4">
-		<h2 class="font-bold">Waktu & tampilan</h2>
-		<div>
-			<label class="label" for="bh">Batas pergantian hari</label>
-			<input id="bh" type="time" class="field" value={p.batasHari} onchange={(e) => app.ubahPengajar({ batasHari: e.currentTarget.value || '00:00' })} />
-			<p class="mt-1.5 text-xs text-ink-muted">Zona waktu Asia/Jakarta (WIB). Geser ke mis. 03:00 bila halaqah berlangsung larut malam, supaya setoran masuk hari yang sama.</p>
-		</div>
+		<h2 class="font-bold">Tampilan</h2>
 		<div>
 			<span class="label">Tema</span>
 			<div class="grid grid-cols-3 gap-1.5 rounded-2xl bg-surface-2 p-1.5">
@@ -214,11 +239,21 @@
 </div>
 
 <Sheet bind:open={bukaPaket} judul="Paket Ngajio">
+	<div class="mb-3 rounded-2xl border border-brand bg-brand-tint p-4">
+		<p class="text-xs font-semibold tracking-wide text-brand-strong uppercase">Paket aktif</p>
+		<p class="text-xl font-extrabold text-brand-strong">{TIER[aktifIdx].nama}</p>
+		{#if app.gratis}
+			<p class="tabular mt-1 mb-1.5 text-sm text-ink-soft">{app.santriAktif.length} dari {BATAS_GRATIS} santri aktif</p>
+			<Progress persen={app.santriAktif.length / BATAS_GRATIS} warna={app.santriAktif.length >= 45 ? 'var(--warn)' : 'var(--brand)'} />
+		{:else}
+			<p class="tabular mt-1 text-sm text-ink-soft">{app.santriAktif.length} santri aktif · {TIER[aktifIdx].batas}</p>
+		{/if}
+	</div>
 	<ul class="space-y-2">
-		{#each TIER as t (t.nama)}
-			<li class="rounded-2xl border border-line bg-surface p-4">
-				<div class="flex items-baseline justify-between">
-					<p class="font-bold">{t.nama}</p>
+		{#each TIER as t, i (t.nama)}
+			<li class="rounded-2xl border bg-surface p-4 {i === aktifIdx ? 'border-brand' : 'border-line'}">
+				<div class="flex items-baseline justify-between gap-2">
+					<p class="font-bold">{t.nama} {#if i === aktifIdx}<span class="chip ml-1 bg-brand-tint text-brand-strong">Aktif</span>{/if}</p>
 					<p class="tabular font-bold text-brand">{t.harga ? `${rupiah(t.harga)}/tahun` : 'Rp0'}</p>
 				</div>
 				<p class="text-sm text-ink-soft">{t.batas}</p>

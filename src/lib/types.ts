@@ -85,4 +85,6 @@ export interface Pengajar {
 	tema: Tema;
 	/** Jam batas pergantian hari, format HH:MM (zona Asia/Jakarta). */
 	batasHari: string;
+	/** Foto profil kecil: data URL JPEG (lihat foto.ts). */
+	foto?: string;
 }

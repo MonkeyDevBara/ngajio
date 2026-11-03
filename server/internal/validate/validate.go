@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"regexp"
 	"strconv"
+	"strings"
 	"time"
 	"unicode"
 	"unicode/utf8"
@@ -146,6 +147,29 @@ func pattern(re *regexp.Regexp, max int) check {
 	}
 }
 
+// maxFoto keeps a pengajar record with a full photo under MaxRecord.
+const maxFoto = 6500
+
+const fotoPrefix = "data:image/jpeg;base64,"
+
+// fotoJPEG accepts a small JPEG data URL: fixed prefix, base64 characters only.
+func fotoJPEG(raw json.RawMessage) (any, error) {
+	s, err := str(raw)
+	if err != nil {
+		return nil, err
+	}
+	if len(s) > maxFoto || !strings.HasPrefix(s, fotoPrefix) {
+		return nil, errors.New("invalid photo")
+	}
+	for i := len(fotoPrefix); i < len(s); i++ {
+		c := s[i]
+		if !(c >= 'A' && c <= 'Z' || c >= 'a' && c <= 'z' || c >= '0' && c <= '9' || c == '+' || c == '/' || c == '=') {
+			return nil, errors.New("invalid photo")
+		}
+	}
+	return s, nil
+}
+
 func enum(vals ...string) check {
 	return func(raw json.RawMessage) (any, error) {
 		s, err := str(raw)
@@ -272,6 +296,7 @@ var tables = map[string]schema{
 		"ambangLulus": req(integer(1, 5)), // nilai is stored 1..5
 		"tema":        req(enum("otomatis", "terang", "gelap")),
 		"batasHari":   req(pattern(hariRe, 5)),
+		"foto":        opt(fotoJPEG),
 	},
 	"metode": {
 		"nama": req(text(60, false)), "template": req(boolean),

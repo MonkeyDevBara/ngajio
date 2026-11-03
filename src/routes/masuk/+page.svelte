@@ -3,7 +3,7 @@
 	import { onMount } from 'svelte';
 	import { app } from '#lib/store.svelte.ts';
 	import { api, pesanGalat, type BalasanAuth } from '#lib/sinkron.ts';
-	import { pasangGoogle } from '#lib/google.ts';
+	import { isiFotoGoogle, pasangGoogle } from '#lib/google.ts';
 	import Icon from '#lib/ui/Icon.svelte';
 	import Logo from '#lib/ui/Logo.svelte';
 
@@ -32,10 +32,11 @@
 		}
 	});
 
-	async function selesai(r: BalasanAuth) {
+	async function selesai(r: BalasanAuth, picture?: string) {
 		proses = true;
 		try {
 			await app.masukAkun(r.user);
+			isiFotoGoogle(picture);
 			goto(app.onboarded ? '/' : '/mulai');
 		} catch (e) {
 			app.tampilToast(pesanGalat(e));
