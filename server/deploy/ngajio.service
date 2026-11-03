@@ -1,0 +1,31 @@
+[Unit]
+Description=Ngajio API (Go + SQLite)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/opt/ngajio/ngajio
+EnvironmentFile=/etc/ngajio/env
+# Logs go to stderr -> journald (journalctl -u ngajio).
+DynamicUser=yes
+StateDirectory=ngajio
+StateDirectoryMode=0700
+ProtectSystem=strict
+ProtectHome=yes
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+# Outbound network stays open: the app fetches Google JWKS (www.googleapis.com).
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+MemoryMax=150M
+LimitNOFILE=4096
+Restart=on-failure
+RestartSec=2
+# The app drains in-flight requests for up to 10 s on SIGTERM.
+TimeoutStopSec=15
+
+[Install]
+WantedBy=multi-user.target
