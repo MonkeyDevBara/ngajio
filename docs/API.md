@@ -3,9 +3,11 @@
 Sumber: rencana PM 2026-11-03, turunan dari `docs/BRIEF.md` dan `docs/DECISIONS.md`. Bila ada pertentangan, BRIEF menang, lalu DECISIONS, lalu dokumen ini.
 
 ## Aturan umum
-- Semua error memakai bentuk `{"error":{"code":"...","message":"..."}}`. Kode: `bad_request` 400, `unauthorized` 401, `forbidden` atau `csrf` 403, `too_large` 413, `rate_limited` 429 (dengan `Retry-After`), `not_configured` 503, `internal` 500. Middleware recover mengubah panic menjadi `internal`.
+- Semua error memakai bentuk `{"error":{"code":"...","message":"..."}}`. Kode: `bad_request` 400, `unauthorized` 401, `forbidden` atau `csrf` 403, `too_large` 413, `rate_limited` 429 (dengan `Retry-After`), `not_configured` 503, `internal` 500, `not_found` 404 (jalur tak dikenal, juga untuk method yang salah pada jalur yang dikenal). Middleware recover mengubah panic menjadi `internal`.
 - Semua respons mengirim `Cache-Control: no-store`, kecuali `/api/config` (`max-age=300`). Gzip untuk respons di atas 1 KB.
 - CSRF berlaku untuk setiap POST: `Content-Type: application/json`, header `X-Ngajio: 1`, dan `Origin` ada serta host-nya sama dengan `Host` permintaan (atau ada di env `ALLOWED_ORIGINS`). nginx harus mengirim `proxy_set_header Host $host`.
+- Batas ukuran body per titik akhir: 4 KB untuk titik akhir auth, 2 MB hanya untuk `/api/sync`. `Content-Length` yang melebihi batas ditolak 413 sebelum body dibaca, dan respons itu memakai `Connection: close`. Body chunked dibatasi dengan `http.MaxBytesReader`.
+- Pencatatan panic: runtime error mencatat pesannya, nilai panic lain hanya mencatat tipenya (`%T`), stack trace selalu dicatat. Nilai panic tidak pernah dicatat karena bisa memuat data pribadi.
 - Pengguna selalu diambil dari sesi. Permintaan tidak pernah membawa id pengguna.
 - Log hanya berisi method, path, status, durasi. Tanpa data pribadi, tanpa token.
 
