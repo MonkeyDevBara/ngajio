@@ -5,6 +5,8 @@
 	"type": "module",
 	"scripts": {
 		"dev": "vite dev",
+		"dev:api": "cd server && ENV=dev DEV_LOGIN=1 LISTEN=127.0.0.1:8787 DB_PATH=./data/ngajio.db BACKUP_DIR=./data/backup COOKIE_SECURE=false go run .",
+		"dev:all": "sh -c 'trap \"kill 0\" INT TERM; npm run dev:api & vite dev --host 127.0.0.1 --port 5173 & wait'",
 		"build": "vite build",
 		"preview": "vite preview",
 		"prepare": "svelte-kit sync || echo ''",

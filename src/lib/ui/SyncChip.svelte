@@ -5,6 +5,7 @@
 	const s = $derived(app.statusSinkron);
 </script>
 
+{#if app.mode === 'akun'}
 <a
 	href="/pengaturan#sinkron"
 	class="chip min-h-8 {s === 'tersinkron'
@@ -17,3 +18,4 @@
 	<Icon n={s === 'tersinkron' ? 'check' : s === 'menunggu' ? 'refresh' : 'alert'} size={14} />
 	{s === 'tersinkron' ? 'Tersinkron' : s === 'menunggu' ? `Menunggu${app.antrian ? ` · ${app.antrian}` : ''}` : 'Gagal'}
 </a>
+{/if}
