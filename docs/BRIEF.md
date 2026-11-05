@@ -45,7 +45,7 @@ Keamanan (diperiksa security-reviewer):
 - Login contoh dev tidak bisa aktif di produksi.
 
 ## Di luar lingkup
-Login tautan email, pembayaran dan penagihan, penegakan batas paket gratis 50 santri di server (status paket diubah manual), banyak pengajar dalam satu lembaga (berbagi kelompok), peran admin, notifikasi WhatsApp ke wali, push notification, antarmuka admin, enkripsi end-to-end.
+Login tautan email, pembayaran dan penagihan, penegakan batas paket gratis 40 santri di server (status paket diubah manual), banyak pengajar dalam satu lembaga (berbagi kelompok), peran admin, notifikasi WhatsApp ke wali, push notification, antarmuka admin, enkripsi end-to-end.
 
 ## Batasan
 - Server bersama dengan site produksi lain (2 vCPU, 7,4 GB RAM): layanan baru harus kecil dan tidak mengganggu site lain.

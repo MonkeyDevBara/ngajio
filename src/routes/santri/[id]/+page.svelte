@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
-	import { app, sekarang } from '#lib/store.svelte.ts';
+	import { app, BATAS_GRATIS, sekarang } from '#lib/store.svelte.ts';
 	import { surah } from '#lib/quran.ts';
 	import { jam, nilaiLabel, relatif, tanggal } from '#lib/format.ts';
 	import { NAMA_JENIS, NAMA_TARGET, posisiLabel, tahsinLabel, teksSetoran } from '#lib/posisi.ts';
@@ -76,7 +76,7 @@
 	}
 	function arsip(v: boolean) {
 		if (!app.arsipkanSantri(id, v)) {
-			galat = 'Paket gratis maksimal 50 santri aktif. Arsipkan santri lain dulu atau upgrade paket.';
+			galat = `Paket gratis maksimal ${BATAS_GRATIS} santri aktif. Arsipkan santri lain dulu atau upgrade paket.`;
 			return;
 		}
 		bukaMenu = false;

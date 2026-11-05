@@ -22,7 +22,7 @@ const KUNCI = 'ngajio:v1';
 const KUNCI_INTRO = 'ngajio:intro';
 /** Keadaan mesin sinkron (lihat sinkron.ts). Dihapus saat keluar. */
 const KUNCI_SINKRON = 'ngajio:sync:v1';
-export const BATAS_GRATIS = 50;
+export const BATAS_GRATIS = 40;
 /** Batas pergantian hari tetap tengah malam (Asia/Jakarta); tidak lagi bisa diatur. */
 const BATAS_HARI = '00:00';
 const AYAT_PER_JUZ = 6236 / 30;

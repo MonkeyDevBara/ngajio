@@ -53,7 +53,7 @@ Folder `ngajio` belum punya `.git` sendiri (proyek lain punya). Sebelum pekerjaa
 - A10: Client ID Google belum ada. Semua dibangun dan diuji tanpanya, login nyata baru bisa diuji setelah pemilik memberi nilai env.
 - A11: batas per IP di belakang nginx memercayai `X-Real-IP` hanya dari peer loopback.
 - A12: batas laju dan sesi dalam memori, reset saat restart. Diterima.
-- A13: batas paket gratis 50 santri tetap di klien (di luar lingkup).
+- A13: batas paket gratis 40 santri tetap di klien (di luar lingkup).
 - A14: deteksi data lokal lama: tanpa `mode` dan email sama dengan email mock berarti contoh.
 - A15: penanda waktu server hanya `rev`. `tglSinkron` memakai waktu asli.
 Kontrak lengkap ada di `docs/API.md`.

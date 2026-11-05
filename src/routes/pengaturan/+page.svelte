@@ -37,11 +37,6 @@
 		}
 	}
 
-	// Paket aktif: gratis, atau tingkat berbayar menurut jumlah santri aktif.
-	const aktifIdx = $derived(
-		app.gratis ? 0 : app.santriAktif.length <= 150 ? 1 : app.santriAktif.length <= 400 ? 2 : 3
-	);
-
 	const SKALA: [SkalaJenis, string][] = [
 		['huruf', 'Huruf'],
 		['bintang', 'Bintang'],
@@ -58,11 +53,17 @@
 		['mushaf', 'Urut mushaf', 'Dari Al-Fatihah']
 	];
 	const TIER = [
-		{ nama: 'Gratis', batas: 'Sampai 50 santri', harga: 0, isi: 'Semua fitur input, laporan dasar, PDF tanpa kop' },
-		{ nama: '51–150 santri', batas: 'Sampai 150 santri', harga: 99000, isi: 'Peta hafalan 30 juz, PDF berkop pengajar' },
-		{ nama: '151–400 santri', batas: 'Sampai 400 santri', harga: 249000, isi: 'Semua fitur paket sebelumnya' },
-		{ nama: 'Di atas 400 santri', batas: 'Tanpa batas', harga: 399000, isi: 'Prioritas dukungan' }
+		{ nama: 'Gratis', batas: 'Sampai 40 santri', maks: BATAS_GRATIS, harga: 0, isi: 'Semua fitur input, laporan dasar, PDF tanpa kop' },
+		{ nama: '41–80 santri', batas: 'Sampai 80 santri', maks: 80, harga: 49000, isi: 'Peta hafalan 30 juz, PDF berkop pengajar' },
+		{ nama: '81–150 santri', batas: 'Sampai 150 santri', maks: 150, harga: 99000, isi: 'Semua fitur paket sebelumnya' },
+		{ nama: '151–300 santri', batas: 'Sampai 300 santri', maks: 300, harga: 249000, isi: 'Semua fitur paket sebelumnya' },
+		{ nama: 'Di atas 300 santri', batas: 'Tanpa batas', maks: Infinity, harga: 499000, isi: 'Prioritas dukungan' }
 	];
+
+	// Paket aktif: gratis, atau tingkat berbayar menurut jumlah santri aktif.
+	const aktifIdx = $derived(
+		app.gratis ? 0 : Math.max(1, TIER.findIndex((t) => app.santriAktif.length <= t.maks))
+	);
 
 	function ambilNilai(v: number) {
 		app.ubahPengajar({ ambangLulus: Math.min(5, Math.max(1, v)) });
@@ -205,7 +206,7 @@
 					<span>Santri aktif</span>
 					<span class="tabular font-bold">{app.santriAktif.length} / {BATAS_GRATIS}</span>
 				</div>
-				<Progress persen={app.santriAktif.length / BATAS_GRATIS} warna={app.santriAktif.length >= 45 ? 'var(--warn)' : 'var(--brand)'} />
+				<Progress persen={app.santriAktif.length / BATAS_GRATIS} warna={app.santriAktif.length >= BATAS_GRATIS * 0.9 ? 'var(--warn)' : 'var(--brand)'} />
 			</div>
 		{/if}
 		<div class="grid grid-cols-2 gap-2">
@@ -244,7 +245,7 @@
 		<p class="text-xl font-extrabold text-brand-strong">{TIER[aktifIdx].nama}</p>
 		{#if app.gratis}
 			<p class="tabular mt-1 mb-1.5 text-sm text-ink-soft">{app.santriAktif.length} dari {BATAS_GRATIS} santri aktif</p>
-			<Progress persen={app.santriAktif.length / BATAS_GRATIS} warna={app.santriAktif.length >= 45 ? 'var(--warn)' : 'var(--brand)'} />
+			<Progress persen={app.santriAktif.length / BATAS_GRATIS} warna={app.santriAktif.length >= BATAS_GRATIS * 0.9 ? 'var(--warn)' : 'var(--brand)'} />
 		{:else}
 			<p class="tabular mt-1 text-sm text-ink-soft">{app.santriAktif.length} santri aktif · {TIER[aktifIdx].batas}</p>
 		{/if}
