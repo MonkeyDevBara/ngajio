@@ -1,5 +1,5 @@
 import { app } from './store.svelte';
-import { surah } from './quran';
+import { labelJuz, surah } from './quran';
 import type { JenisTarget, Setoran } from './types';
 
 /** "Lanjut An-Naba' : 5" — dipakai di daftar supaya pengajar tahu posisi tanpa membuka santri. */
@@ -18,8 +18,19 @@ export function tahsinLabel(santriId: string): string {
 export function teksSetoran(z: Setoran): string {
 	const bagian: string[] = [];
 	if (z.suratAwal != null) {
-		const a = z.ayatAwal === z.ayatAkhir ? `ayat ${z.ayatAwal}` : `ayat ${z.ayatAwal}–${z.ayatAkhir}`;
-		bagian.push(`${surah(z.suratAwal).latin} · ${a}`);
+		const akhir = z.suratAkhir ?? z.suratAwal;
+		if (akhir === z.suratAwal) {
+			const a = z.ayatAwal === z.ayatAkhir ? `ayat ${z.ayatAwal}` : `ayat ${z.ayatAwal}–${z.ayatAkhir}`;
+			bagian.push(`${surah(z.suratAwal).latin} · ${a}`);
+		} else {
+			const r = { suratAwal: z.suratAwal, ayatAwal: z.ayatAwal ?? 1, suratAkhir: akhir, ayatAkhir: z.ayatAkhir ?? surah(akhir).ayat };
+			const juz = labelJuz(r);
+			const utuh = r.ayatAwal === 1 && r.ayatAkhir === surah(akhir).ayat;
+			const dari = utuh ? surah(r.suratAwal).latin : `${surah(r.suratAwal).latin}:${r.ayatAwal}`;
+			const sampai = utuh ? surah(akhir).latin : `${surah(akhir).latin}:${r.ayatAkhir}`;
+			if (juz) bagian.push(juz);
+			bagian.push(`${dari} – ${sampai}`);
+		}
 	}
 	if (z.jenis === 'tahsin') {
 		const lv = app.levelById(z.levelId);

@@ -624,11 +624,13 @@ class Toko {
 		return c;
 	}
 
+	/** Murojaah terakhir per surat. Rentang beberapa surat menandai tiap surat di dalamnya. */
 	murojaahTerakhir(santriId: string): Map<number, string> {
 		const m = new Map<number, string>();
 		for (const z of this.setoranSantri(santriId)) {
-			if (z.jenis === 'murojaah' && z.suratAwal != null && !m.has(z.suratAwal)) {
-				m.set(z.suratAwal, z.dicatatPada);
+			if (z.jenis !== 'murojaah' || z.suratAwal == null) continue;
+			for (let n = z.suratAwal; n <= (z.suratAkhir ?? z.suratAwal); n++) {
+				if (!m.has(n)) m.set(n, z.dicatatPada);
 			}
 		}
 		return m;

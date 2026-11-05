@@ -14,13 +14,16 @@
 
 	let buka = $state(false);
 	let pilih = $state<number | null>(null);
-	const riwayat = $derived(
-		pilih == null
-			? []
-			: app
-					.setoranSantri(santriId)
-					.filter((z) => z.jenis !== 'tahsin' && (z.suratAwal === pilih || z.suratAkhir === pilih))
-	);
+	const riwayat = $derived.by(() => {
+		const n = pilih;
+		if (n == null) return [];
+		return app
+			.setoranSantri(santriId)
+			.filter(
+				(z) =>
+					z.jenis !== 'tahsin' && z.suratAwal != null && n >= z.suratAwal && n <= (z.suratAkhir ?? z.suratAwal)
+			);
+	});
 
 	const gaya: Record<StatusSurat, string> = {
 		hafal: 'background:var(--brand);color:var(--on-brand);border-color:var(--brand)',

@@ -167,3 +167,36 @@ export function positionLabel(n: number, ayat: number): string {
 	const s = surah(n);
 	return `${s.latin} : ${ayat}`;
 }
+
+/** Awal tiap juz (surat, ayat), mushaf Madinah. Indeks 0 = juz 1. */
+const JUZ_MULAI: [number, number][] = [
+	[1, 1], [2, 142], [2, 253], [3, 93], [4, 24], [4, 148], [5, 82], [6, 111], [7, 88], [8, 41],
+	[9, 93], [11, 6], [12, 53], [15, 1], [17, 1], [18, 75], [21, 1], [23, 1], [25, 21], [27, 56],
+	[29, 46], [33, 31], [36, 28], [39, 32], [41, 47], [46, 1], [51, 31], [58, 1], [67, 1], [78, 1]
+];
+
+export type Rentang = { suratAwal: number; ayatAwal: number; suratAkhir: number; ayatAkhir: number };
+
+/** Rentang ayat dari awal juz `dari` sampai akhir juz `sampai` (keduanya 1..30, dari <= sampai). */
+export function rentangJuz(dari: number, sampai: number): Rentang {
+	const [suratAwal, ayatAwal] = JUZ_MULAI[dari - 1];
+	if (sampai >= 30) return { suratAwal, ayatAwal, suratAkhir: 114, ayatAkhir: surah(114).ayat };
+	const [sb, ab] = JUZ_MULAI[sampai];
+	// Akhir juz = ayat tepat sebelum awal juz berikutnya.
+	return ab > 1
+		? { suratAwal, ayatAwal, suratAkhir: sb, ayatAkhir: ab - 1 }
+		: { suratAwal, ayatAwal, suratAkhir: sb - 1, ayatAkhir: surah(sb - 1).ayat };
+}
+
+/** "Juz 29" atau "Juz 29–30" bila rentang persis sama dengan satu juz atau lebih; selain itu null. */
+export function labelJuz(r: Rentang): string | null {
+	for (let d = 1; d <= 30; d++) {
+		const a = rentangJuz(d, d);
+		if (a.suratAwal !== r.suratAwal || a.ayatAwal !== r.ayatAwal) continue;
+		for (let s = d; s <= 30; s++) {
+			const b = rentangJuz(s, s);
+			if (b.suratAkhir === r.suratAkhir && b.ayatAkhir === r.ayatAkhir) return d === s ? `Juz ${d}` : `Juz ${d}–${s}`;
+		}
+	}
+	return null;
+}
