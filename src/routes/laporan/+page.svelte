@@ -168,7 +168,7 @@
 		</div>
 		<div class="card">
 			<p class="text-xs font-semibold text-ink-muted uppercase">Tahsin lulus</p>
-			<p class="tabular mt-1 text-3xl font-extrabold">{rekap.halamanTahsin}<span class="text-base font-semibold text-ink-muted"> hal.</span></p>
+			<p class="tabular mt-1 text-3xl font-extrabold">{rekap.ayatTahsin}<span class="text-base font-semibold text-ink-muted"> ayat</span></p>
 		</div>
 	</section>
 
@@ -201,7 +201,7 @@
 					{@const p = app.progressTarget(t, santriId)}
 					<div>
 						<div class="mb-1 flex justify-between text-sm">
-							<span class="font-semibold">{t.jenis === 'ziyadah-pekan' ? 'Hafalan baru per pekan' : t.jenis === 'hafalan' ? 'Capaian hafalan' : 'Naik jilid'}</span>
+							<span class="font-semibold">{t.jenis === 'ziyadah-pekan' ? 'Hafalan baru per pekan' : t.jenis === 'hafalan' ? 'Capaian hafalan' : 'Naik level'}</span>
 							<span class="tabular font-bold">{Math.round(p.persen * 100)}%</span>
 						</div>
 						<Progress persen={p.persen} />

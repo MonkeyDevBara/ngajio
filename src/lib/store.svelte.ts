@@ -49,13 +49,6 @@ export interface PosisiZiyadah {
 	surat: number;
 	ayat: number;
 }
-export interface PosisiTahsin {
-	levelId: string;
-	halaman: number;
-	/** Halaman terakhir jilid sudah tercapai: pengajar diminta konfirmasi naik jilid. */
-	selesai: boolean;
-	berikutnya: string | null;
-}
 export interface HasilKemajuan {
 	nilai: number;
 	target: number;
@@ -69,13 +62,13 @@ export interface Rekap {
 	santriSetor: number;
 	santriTotal: number;
 	ayatBaru: number;
-	halamanTahsin: number;
+	ayatTahsin: number;
 	hariAktif: number;
 	perSantri: {
 		santri: Santri;
 		jumlah: number;
 		ayat: number;
-		halaman: number;
+		ayatTahsin: number;
 		rata: number | null;
 		terakhir: string | null;
 	}[];
@@ -208,6 +201,7 @@ class Toko {
 					// Data lama memakai default 'otomatis'; default sekarang terang.
 					if (this.pengajar.tema === 'otomatis') this.pengajar.tema = 'terang';
 					this.metode = d.metode;
+					this.namakanTilawati();
 					this.kelompok = d.kelompok;
 					this.santri = d.santri;
 					this.setoran = d.setoran;
@@ -263,6 +257,17 @@ class Toko {
 		if (this.mode === 'akun') sinkron.ubahan(d);
 	}
 
+	/** Metode bawaan "Talaqqi" berganti nama jadi "Tilawati". Id tetap supaya referensi santri dan setoran utuh. */
+	private namakanTilawati() {
+		let berubah = false;
+		this.metode = this.metode.map((m) => {
+			if (m.id !== 'talaqqi' || m.nama !== 'Talaqqi') return m;
+			berubah = true;
+			return { ...m, nama: 'Tilawati' };
+		});
+		return berubah;
+	}
+
 	/** Dipanggil saat aplikasi dibuka (layout) dan setelah masuk. Contoh tidak pernah sinkron. */
 	mulaiSinkron() {
 		if (this.mode === 'akun' && this.sesi && this.akunSub) sinkron.mulai(this.host, this.akunSub);
@@ -315,6 +320,7 @@ class Toko {
 			return buang.size ? out.filter((r) => !buang.has(r.id)) : out;
 		};
 		this.metode = gabung(this.metode, per.get('metode'));
+		this.namakanTilawati();
 		this.kelompok = gabung(this.kelompok, per.get('kelompok'));
 		this.santri = gabung(this.santri, per.get('santri'));
 		this.setoran = gabung(this.setoran, per.get('setoran'));
@@ -549,40 +555,9 @@ class Toko {
 		return Math.max(1, z.ayatAkhir - z.ayatAwal + 1);
 	}
 
-	posisiTahsin(santriId: string): PosisiTahsin {
-		const s = this.santriById(santriId);
-		const m = this.metodeById(s?.metodeId);
-		const ambang = this.pengajar.ambangLulus;
-		const list = this.setoranSantri(santriId).filter((z) => z.jenis === 'tahsin');
-		const lulus = list.find((z) => z.nilai >= ambang);
-		const cariLevel = (id?: string) =>
-			m.level.find((l) => l.id === id) ??
-			this.metode.flatMap((x) => x.level).find((l) => l.id === id) ??
-			m.level[0];
-		if (lulus) {
-			const lv = cariLevel(lulus.levelId);
-			const idx = m.level.findIndex((l) => l.id === lv.id);
-			const akhir = lulus.halamanAkhir ?? 1;
-			if (akhir >= lv.jumlahHalaman) {
-				return {
-					levelId: lv.id,
-					halaman: lv.jumlahHalaman,
-					selesai: true,
-					berikutnya: m.level[idx + 1]?.id ?? null
-				};
-			}
-			return { levelId: lv.id, halaman: akhir + 1, selesai: false, berikutnya: null };
-		}
-		const pertama = list[list.length - 1];
-		if (pertama) {
-			return {
-				levelId: cariLevel(pertama.levelId).id,
-				halaman: pertama.halamanAwal ?? 1,
-				selesai: false,
-				berikutnya: null
-			};
-		}
-		return { levelId: m.level[0].id, halaman: 1, selesai: false, berikutnya: null };
+	/** Level terakhir yang diisi pada setoran tahsin santri (kosong bila belum pernah). */
+	levelTahsinTerakhir(santriId: string): string {
+		return this.setoranSantri(santriId).find((z) => z.jenis === 'tahsin' && z.levelId)?.levelId ?? '';
 	}
 
 	levelById(id: string | undefined) {
@@ -701,17 +676,20 @@ class Toko {
 		return [...milik, ...kelompok];
 	}
 
+	/** Level tahsin tertinggi yang pernah lulus (indeks level 0-based, ditambah pecahan halaman bila diisi). */
 	private kemajuanTahsin(santriId: string, sampai?: string): number {
 		const s = this.santriById(santriId);
 		const m = this.metodeById(s?.metodeId);
 		const ambang = this.pengajar.ambangLulus;
-		const z = this.setoranSantri(santriId).find(
-			(x) => x.jenis === 'tahsin' && x.nilai >= ambang && (!sampai || x.dicatatPada <= sampai)
-		);
-		if (!z) return 0;
-		const idx = Math.max(0, m.level.findIndex((l) => l.id === z.levelId));
-		const lv = m.level[idx];
-		return idx + (z.halamanAkhir ?? 0) / (lv?.jumlahHalaman || 1);
+		let terbaik = 0;
+		for (const z of this.setoranSantri(santriId)) {
+			if (z.jenis !== 'tahsin' || z.nilai < ambang || !z.levelId) continue;
+			if (sampai && z.dicatatPada > sampai) continue;
+			const idx = m.level.findIndex((l) => l.id === z.levelId);
+			if (idx < 0) continue;
+			terbaik = Math.max(terbaik, idx + (z.halamanAkhir ?? 0) / (m.level[idx].jumlahHalaman || 1));
+		}
+		return terbaik;
 	}
 
 	/** Progress dihitung dari setoran, tidak disimpan sebagai angka terpisah. */
@@ -736,7 +714,7 @@ class Toko {
 			}
 		} else {
 			nilai = Math.max(0, this.kemajuanTahsin(santriId) - this.kemajuanTahsin(santriId, t.mulai));
-			label = `${nilai.toLocaleString('id-ID', { maximumFractionDigits: 1 })} dari ${target.toLocaleString('id-ID')} jilid`;
+			label = `${nilai.toLocaleString('id-ID', { maximumFractionDigits: 1 })} dari ${target.toLocaleString('id-ID')} level`;
 		}
 		return { nilai, target, persen: target > 0 ? Math.min(1, nilai / target) : 0, label };
 	}
@@ -987,14 +965,14 @@ class Toko {
 		const per = new Map<string, Setoran[]>();
 		let jumlahNilai = 0;
 		let ayat = 0;
-		let halaman = 0;
+		let ayatTh = 0;
 		for (const z of list) {
 			perJenis[z.jenis]++;
 			jumlahNilai += z.nilai;
 			hari.add(this.hariBisnis(z.dicatatPada));
 			if (z.nilai >= ambang) {
 				if (z.jenis === 'ziyadah') ayat += (z.ayatAkhir ?? 0) - (z.ayatAwal ?? 0) + 1;
-				if (z.jenis === 'tahsin') halaman += (z.halamanAkhir ?? 0) - (z.halamanAwal ?? 0) + 1;
+				if (z.jenis === 'tahsin' && z.suratAwal != null) ayatTh += (z.ayatAkhir ?? 0) - (z.ayatAwal ?? 0) + 1;
 			}
 			const l = per.get(z.santriId);
 			if (l) l.push(z);
@@ -1019,7 +997,7 @@ class Toko {
 					santri,
 					jumlah: zs.length,
 					ayat: nz.reduce((a, z) => a + (z.ayatAkhir ?? 0) - (z.ayatAwal ?? 0) + 1, 0),
-					halaman: nt.reduce((a, z) => a + (z.halamanAkhir ?? 0) - (z.halamanAwal ?? 0) + 1, 0),
+					ayatTahsin: nt.reduce((a, z) => a + (z.suratAwal == null ? 0 : (z.ayatAkhir ?? 0) - (z.ayatAwal ?? 0) + 1), 0),
 					rata: zs.length ? zs.reduce((a, z) => a + z.nilai, 0) / zs.length : null,
 					terakhir: zs.length ? zs[0].dicatatPada : null
 				};
@@ -1034,7 +1012,7 @@ class Toko {
 			santriSetor: per.size,
 			santriTotal: ids.size,
 			ayatBaru: ayat,
-			halamanTahsin: halaman,
+			ayatTahsin: ayatTh,
 			hariAktif: hari.size,
 			perSantri
 		};

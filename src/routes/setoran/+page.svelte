@@ -9,8 +9,8 @@
 	import Avatar from '#lib/ui/Avatar.svelte';
 	import Icon from '#lib/ui/Icon.svelte';
 	import NilaiPicker from '#lib/ui/NilaiPicker.svelte';
+	import NumberField from '#lib/ui/NumberField.svelte';
 	import Sheet from '#lib/ui/Sheet.svelte';
-	import Stepper from '#lib/ui/Stepper.svelte';
 	import SuratPicker from '#lib/ui/SuratPicker.svelte';
 
 	const q = page.url.searchParams;
@@ -22,11 +22,14 @@
 	let santriId = $state(santriAwal);
 	let jenis = $state<Jenis>(edit?.jenis ?? (q.get('jenis') as Jenis | null) ?? 'ziyadah');
 	let surat = $state(0);
-	let dariAyat = $state(1);
-	let sampaiAyat = $state(1);
+	/** Kolom ayat dan halaman dibiarkan kosong sampai diisi angka. */
+	let dariAyat = $state<number | null>(null);
+	let sampaiAyat = $state<number | null>(null);
+	/** Hanya petunjuk di kolom "Dari ayat" (posisi lanjut hafalan). */
+	let saranAyat = $state(1);
 	let levelId = $state('');
-	let halDari = $state(1);
-	let halSampai = $state(1);
+	let halDari = $state<number | null>(null);
+	let halSampai = $state<number | null>(null);
 	let nilai = $state(edit?.nilai ?? 0);
 	let catatan = $state(edit?.catatan ?? '');
 	let tag = $state<string[]>(edit ? [...edit.tag] : []);
@@ -42,68 +45,51 @@
 	const ambang = $derived(app.pengajar.ambangLulus);
 	const info = $derived(surat ? surah(surat) : null);
 
-	/** Isi otomatis posisi dari setoran terakhir santri. */
+	/** Isi awal tiap kali santri atau jenis berganti. Ayat dan halaman selalu kosong. */
 	function muat() {
+		dariAyat = sampaiAyat = halDari = halSampai = null;
+		saranAyat = 1;
+		surat = 0;
+		levelId = '';
 		if (!santriId) return;
 		if (jenis === 'ziyadah') {
 			const p = app.posisiZiyadah(santriId);
 			surat = p.surat;
-			dariAyat = p.ayat;
-			sampaiAyat = Math.min(surah(p.surat).ayat, p.ayat + app.spanDefault(santriId) - 1);
+			saranAyat = p.ayat;
 		} else if (jenis === 'murojaah') {
-			const pertama = app.saranMurojaah(santriId, 1)[0]?.surat ?? poolMurojaah[0];
-			if (pertama) pilihSuratMurojaah(pertama);
-			else surat = 0;
+			surat = app.saranMurojaah(santriId, 1)[0]?.surat ?? 0;
 		} else {
-			const p = app.posisiTahsin(santriId);
-			levelId = p.levelId;
-			const lv = app.levelById(p.levelId);
-			halDari = p.halaman;
-			halSampai = Math.min(lv?.jumlahHalaman ?? p.halaman, p.halaman + (p.selesai ? 0 : 1));
+			levelId = app.levelTahsinTerakhir(santriId);
 		}
 	}
 
-	function pilihSuratMurojaah(n: number) {
+	function setSurat(n: number) {
 		surat = n;
-		dariAyat = 1;
-		sampaiAyat = surah(n).ayat;
+		dariAyat = sampaiAyat = null;
+		const p = jenis === 'ziyadah' && santriId ? app.posisiZiyadah(santriId) : null;
+		saranAyat = p && p.surat === n ? p.ayat : 1;
 	}
 
-	const poolMurojaah = $derived(
-		santriId
-			? [...app.statusSurat(santriId)].filter(([, st]) => st !== 'kosong').map(([n]) => n)
-			: []
-	);
+	function pilihLevel(id: string) {
+		levelId = levelId === id ? '' : id;
+		halDari = halSampai = null;
+	}
+
 	const saran = $derived(santriId && jenis === 'murojaah' ? app.saranMurojaah(santriId) : []);
-	const tahsin = $derived(santriId ? app.posisiTahsin(santriId) : null);
 	const metode = $derived(app.metodeById(santri?.metodeId));
 	const level = $derived(app.levelById(levelId));
-	const adaBerikutnya = $derived(
-		!edit && jenis === 'tahsin' && tahsin?.selesai && tahsin.berikutnya && levelId === tahsin.levelId
-	);
 
 	// Nilai awal: dari setoran yang diedit, atau posisi otomatis santri.
 	if (edit) {
 		surat = edit.suratAwal ?? 0;
-		dariAyat = edit.ayatAwal ?? 1;
-		sampaiAyat = edit.ayatAkhir ?? 1;
+		dariAyat = edit.ayatAwal ?? null;
+		sampaiAyat = edit.ayatAkhir ?? null;
 		levelId = edit.levelId ?? '';
-		halDari = edit.halamanAwal ?? 1;
-		halSampai = edit.halamanAkhir ?? 1;
+		halDari = edit.halamanAwal ?? null;
+		halSampai = edit.halamanAkhir ?? null;
 	} else {
 		muat();
 	}
-
-	// Rentang tetap konsisten: dari <= sampai <= jumlah ayat/halaman.
-	$effect(() => {
-		if (sampaiAyat < dariAyat) sampaiAyat = dariAyat;
-		if (info && sampaiAyat > info.ayat) sampaiAyat = info.ayat;
-		if (info && dariAyat > info.ayat) dariAyat = info.ayat;
-	});
-	$effect(() => {
-		if (halSampai < halDari) halSampai = halDari;
-		if (level && halSampai > level.jumlahHalaman) halSampai = level.jumlahHalaman;
-	});
 
 	function pilihSantri(id: string) {
 		santriId = id;
@@ -120,13 +106,6 @@
 		tag = [];
 		muat();
 	}
-	function naikJilid() {
-		if (!tahsin?.berikutnya) return;
-		const lv = app.levelById(tahsin.berikutnya);
-		levelId = tahsin.berikutnya;
-		halDari = 1;
-		halSampai = Math.min(lv?.jumlahHalaman ?? 2, 2);
-	}
 	function toggleTag(t: string) {
 		tag = tag.includes(t) ? tag.filter((x) => x !== t) : tag.length < 4 ? [...tag, t] : tag;
 	}
@@ -139,8 +118,20 @@
 				: '/'
 	);
 
+	const ayatSah = $derived(
+		!!info && dariAyat !== null && dariAyat <= info.ayat && (sampaiAyat === null || sampaiAyat >= dariAyat)
+	);
+	/** Halaman opsional: kosong, atau "dari" terisi dan "sampai" tidak lebih kecil. */
+	const halamanSah = $derived(
+		!level || (halDari === null && halSampai === null) || (halDari !== null && (halSampai === null || halSampai >= halDari))
+	);
+	/** Tahsin lama (sebelum ada surat dan ayat) boleh diedit tanpa memilih surat. */
+	const tahsinLama = $derived(!!edit && edit.jenis === 'tahsin' && edit.suratAwal == null);
 	const bisaSimpan = $derived(
-		!!santriId && nilai > 0 && (jenis === 'tahsin' ? !!levelId : surat > 0)
+		!!santriId &&
+			nilai > 0 &&
+			halamanSah &&
+			(surat > 0 ? ayatSah : tahsinLama && !!levelId)
 	);
 	const dibawahAmbang = $derived(nilai > 0 && nilai < ambang);
 
@@ -153,10 +144,20 @@
 			catatan: catatan.trim() || undefined,
 			tag: [...tag]
 		};
+		const letak =
+			surat > 0
+				? { suratAwal: surat, ayatAwal: dariAyat!, suratAkhir: surat, ayatAkhir: sampaiAyat ?? dariAyat! }
+				: {};
 		const isi =
 			jenis === 'tahsin'
-				? { ...dasar, levelId, halamanAwal: halDari, halamanAkhir: halSampai }
-				: { ...dasar, suratAwal: surat, ayatAwal: dariAyat, suratAkhir: surat, ayatAkhir: sampaiAyat };
+				? {
+						...dasar,
+						...letak,
+						levelId: levelId || undefined,
+						halamanAwal: level && halDari !== null ? halDari : undefined,
+						halamanAkhir: level && halDari !== null ? (halSampai ?? halDari) : undefined
+					}
+				: { ...dasar, ...letak };
 		if (edit) {
 			app.ubahSetoran(edit.id, isi);
 			app.tampilToast('Setoran diperbarui');
@@ -254,102 +255,90 @@
 				<p class="mt-2 px-1 text-xs text-ink-muted">{PENJELASAN_JENIS[jenis]}</p>
 			</div>
 
-			<!-- Posisi -->
-			{#if jenis !== 'tahsin'}
-				<section class="space-y-3">
-					<div class="card flex items-center gap-3">
-						<div class="min-w-0 flex-1">
-							{#if info}
-								<p class="truncate text-xl leading-tight font-bold">{info.latin}</p>
-								<p class="text-sm text-ink-muted">{info.ayat} ayat · Juz {info.juz}</p>
-							{:else}
-								<p class="font-semibold text-ink-soft">Belum ada surat yang bisa diulang</p>
-							{/if}
-						</div>
-						{#if info}<span class="font-arabic text-3xl" dir="rtl" lang="ar">{info.arab}</span>{/if}
-						<button
-							type="button"
-							class="btn btn-soft min-h-11 px-3 text-sm"
-							onclick={() => (bukaSurat = true)}
-							disabled={jenis === 'murojaah' && poolMurojaah.length === 0}>Ganti</button
-						>
-					</div>
-
-					{#if jenis === 'ziyadah' && !edit}
-						<p class="flex items-center gap-1.5 px-1 text-xs text-brand-strong">
-							<Icon n="bolt" size={14} />Lanjut otomatis dari setoran terakhir ({posisiLabel(santriId).replace('Lanjut ', '')})
-						</p>
-					{/if}
-
-					{#if jenis === 'murojaah' && saran.length}
-						<div>
-							<p class="mb-1.5 px-1 text-xs font-semibold text-ink-soft">Paling lama tidak diulang</p>
-							<div class="flex flex-wrap gap-2">
-								{#each saran as s (s.surat)}
-									<button
-										type="button"
-										class="chip min-h-10 px-3 text-sm {surat === s.surat
-											? 'bg-brand text-on-brand'
-											: 'border border-line bg-surface text-ink'}"
-										onclick={() => pilihSuratMurojaah(s.surat)}
-										>{surah(s.surat).latin}
-										<span class="opacity-70">{s.hari === null ? 'belum pernah' : `${s.hari} hr`}</span></button
-									>
-								{/each}
-							</div>
-						</div>
-					{/if}
-
-					{#if info}
-						<div class="grid grid-cols-2 gap-2">
-							<Stepper label="Dari ayat" bind:value={dariAyat} min={1} max={info.ayat} />
-							<Stepper label="Sampai ayat" bind:value={sampaiAyat} min={dariAyat} max={info.ayat} />
-						</div>
-						{#if jenis === 'ziyadah' && sampaiAyat >= info.ayat && nilai >= ambang}
-							<p class="px-1 text-xs text-ok">Surat selesai. Setoran berikutnya lanjut ke surat berikutnya.</p>
+			<!-- Surat dan ayat: sama untuk hafalan baru, murajaah, dan tahsin -->
+			<section class="space-y-3">
+				<div class="card flex items-center gap-3">
+					<div class="min-w-0 flex-1">
+						{#if info}
+							<p class="truncate text-xl leading-tight font-bold">{info.latin}</p>
+							<p class="text-sm text-ink-muted">{info.ayat} ayat · Juz {info.juz}</p>
+						{:else}
+							<p class="font-semibold text-ink-soft">Belum memilih surat</p>
 						{/if}
+					</div>
+					{#if info}<span class="font-arabic text-3xl" dir="rtl" lang="ar">{info.arab}</span>{/if}
+					<button type="button" class="btn btn-soft min-h-11 px-3 text-sm" onclick={() => (bukaSurat = true)}
+						>{info ? 'Ganti' : 'Pilih surat'}</button
+					>
+				</div>
+
+				{#if jenis === 'ziyadah' && !edit}
+					<p class="flex items-center gap-1.5 px-1 text-xs text-brand-strong">
+						<Icon n="bolt" size={14} />Lanjut otomatis dari setoran terakhir ({posisiLabel(santriId).replace('Lanjut ', '')})
+					</p>
+				{/if}
+
+				{#if jenis === 'murojaah' && saran.length}
+					<div>
+						<p class="mb-1.5 px-1 text-xs font-semibold text-ink-soft">Paling lama tidak diulang</p>
+						<div class="flex flex-wrap gap-2">
+							{#each saran as s (s.surat)}
+								<button
+									type="button"
+									class="chip min-h-10 px-3 text-sm {surat === s.surat
+										? 'bg-brand text-on-brand'
+										: 'border border-line bg-surface text-ink'}"
+									onclick={() => setSurat(s.surat)}
+									>{surah(s.surat).latin}
+									<span class="opacity-70">{s.hari === null ? 'belum pernah' : `${s.hari} hr`}</span></button
+								>
+							{/each}
+						</div>
+					</div>
+				{/if}
+
+				{#if info}
+					<div class="grid grid-cols-2 gap-2">
+						<NumberField id="ayat-dari" label="Dari ayat" bind:value={dariAyat} max={info.ayat} placeholder={String(saranAyat)} />
+						<NumberField id="ayat-sampai" label="Sampai ayat" bind:value={sampaiAyat} max={info.ayat} placeholder="maks {info.ayat}" />
+					</div>
+					{#if sampaiAyat !== null && dariAyat !== null && sampaiAyat < dariAyat}
+						<p class="px-1 text-xs text-danger" role="alert">Sampai ayat tidak boleh lebih kecil dari dari ayat.</p>
 					{/if}
-				</section>
-			{:else}
-				<section class="space-y-3">
+					{#if jenis === 'ziyadah' && (sampaiAyat ?? dariAyat ?? 0) >= info.ayat && nilai >= ambang}
+						<p class="px-1 text-xs text-ok">Surat selesai. Setoran berikutnya lanjut ke surat berikutnya.</p>
+					{/if}
+				{/if}
+
+				{#if jenis === 'tahsin'}
 					<div class="card">
-						<p class="text-xs font-semibold text-ink-muted uppercase">{metode?.nama ?? 'Metode'}</p>
+						<p class="text-xs font-semibold text-ink-muted uppercase">
+							{metode?.nama ?? 'Metode'} <span class="font-normal normal-case">· level opsional</span>
+						</p>
 						<div class="mt-2 flex flex-wrap gap-2">
 							{#each metode?.level ?? [] as lv (lv.id)}
 								<button
 									type="button"
+									aria-pressed={levelId === lv.id}
 									class="chip min-h-10 px-3 text-sm {levelId === lv.id
 										? 'bg-brand text-on-brand'
 										: 'border border-line bg-surface text-ink'}"
-									onclick={() => {
-										levelId = lv.id;
-										halDari = 1;
-										halSampai = Math.min(lv.jumlahHalaman, 2);
-									}}>{lv.nama}</button
+									onclick={() => pilihLevel(lv.id)}>{lv.nama}</button
 								>
 							{/each}
 						</div>
 					</div>
 					{#if level}
 						<div class="grid grid-cols-2 gap-2">
-							<Stepper label="Dari halaman" bind:value={halDari} min={1} max={level.jumlahHalaman} />
-							<Stepper label="Sampai halaman" bind:value={halSampai} min={halDari} max={level.jumlahHalaman} />
+							<NumberField id="hal-dari" label="Dari halaman" bind:value={halDari} max={level.jumlahHalaman} placeholder="opsional" />
+							<NumberField id="hal-sampai" label="Sampai halaman" bind:value={halSampai} max={level.jumlahHalaman} placeholder="maks {level.jumlahHalaman}" />
 						</div>
-						<p class="px-1 text-xs text-ink-muted">{level.nama} · {level.jumlahHalaman} halaman</p>
+						{#if !halamanSah}
+							<p class="px-1 text-xs text-danger" role="alert">Isi dari halaman, dan sampai halaman tidak boleh lebih kecil.</p>
+						{/if}
 					{/if}
-					{#if adaBerikutnya}
-						<div class="flex items-center gap-3 rounded-2xl bg-gold-tint p-4">
-							<Icon n="flag" class="shrink-0 text-warn" />
-							<p class="flex-1 text-sm text-warn">
-								Halaman terakhir <b>{level?.nama}</b> sudah tercapai. Naik jilid?
-							</p>
-							<button type="button" class="btn btn-primary min-h-11 px-3 text-sm" onclick={naikJilid}
-								>Naik jilid</button
-							>
-						</div>
-					{/if}
-				</section>
-			{/if}
+				{/if}
+			</section>
 
 			<!-- Nilai -->
 			<section>
@@ -472,12 +461,10 @@
 <SuratPicker
 	bind:open={bukaSurat}
 	dipilih={surat}
-	batasi={jenis === 'murojaah' ? poolMurojaah : undefined}
-	keterangan={(n) =>
-		jenis === 'murojaah' ? (app.statusSurat(santriId).get(n) === 'hafal' ? 'hafal' : 'sedang dihafal') : undefined}
-	pilih={(s) => {
-		surat = s.n;
-		dariAyat = 1;
-		sampaiAyat = jenis === 'murojaah' ? s.ayat : Math.min(s.ayat, app.spanDefault(santriId));
+	keterangan={(n) => {
+		if (jenis !== 'murojaah') return undefined;
+		const st = app.statusSurat(santriId).get(n);
+		return st === 'hafal' ? 'hafal' : st === 'sedang' ? 'sedang dihafal' : undefined;
 	}}
+	pilih={(s) => setSurat(s.n)}
 />

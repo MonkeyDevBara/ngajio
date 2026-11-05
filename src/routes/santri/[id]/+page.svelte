@@ -4,13 +4,14 @@
 	import { app, sekarang } from '#lib/store.svelte.ts';
 	import { surah } from '#lib/quran.ts';
 	import { jam, nilaiLabel, relatif, tanggal } from '#lib/format.ts';
-	import { NAMA_JENIS, NAMA_TARGET, TEMPLATE_TARGET, posisiLabel, tahsinLabel, teksSetoran } from '#lib/posisi.ts';
+	import { NAMA_JENIS, NAMA_TARGET, posisiLabel, tahsinLabel, teksSetoran } from '#lib/posisi.ts';
 	import Avatar from '#lib/ui/Avatar.svelte';
 	import Icon from '#lib/ui/Icon.svelte';
 	import PageHeader from '#lib/ui/PageHeader.svelte';
 	import PetaHafalan from '#lib/ui/PetaHafalan.svelte';
 	import Progress from '#lib/ui/Progress.svelte';
 	import Sheet from '#lib/ui/Sheet.svelte';
+	import TargetSheet from '#lib/ui/TargetSheet.svelte';
 
 	const id = $derived(page.params.id ?? '');
 	const s = $derived(app.santriById(id));
@@ -39,26 +40,8 @@
 
 	const ringkas = $derived(s ? app.ringkasTarget(id) : null);
 
-	/* Target khusus santri: buka sheet (1), pilih template (2). Menimpa target kelompok dengan jenis sama. */
+	/* Target khusus santri: buka sheet, pilih jenis, isi angka. Menimpa target kelompok dengan jenis sama. */
 	let bukaTarget = $state(false);
-	let durasi = $state(90);
-	function buatTarget(t: (typeof TEMPLATE_TARGET)[number]) {
-		const mulai = sekarang();
-		app.tambahTarget({
-			santriId: id,
-			jenis: t.jenis,
-			nilaiTarget: t.nilai,
-			satuan: t.satuan,
-			mulai: mulai.toISOString(),
-			tenggat: new Date(mulai.getTime() + durasi * 86400000).toISOString()
-		});
-		bukaTarget = false;
-		const baru = app.target.at(-1)!;
-		app.tampilToast(`Target “${t.judul}” dibuat untuk ${s?.nama.split(' ')[0]}`, {
-			label: 'Urungkan',
-			fn: () => app.hapusTarget(baru.id)
-		});
-	}
 	function hapusTarget(tid: string) {
 		const salin = { ...app.target.find((x) => x.id === tid)! };
 		app.hapusTarget(tid);
@@ -148,11 +131,7 @@
 			<div class="card">
 				<p class="text-xs font-semibold text-ink-muted uppercase">Tahsin</p>
 				<p class="mt-1 text-lg leading-tight font-bold">{tahsinLabel(id)}</p>
-				{#if app.posisiTahsin(id).selesai}
-					<p class="mt-1 text-xs text-warn">Jilid selesai, siap naik</p>
-				{:else}
-					<p class="mt-1 text-xs text-ink-muted">{metode?.nama}</p>
-				{/if}
+				<p class="mt-1 text-xs text-ink-muted">{metode?.nama}</p>
 			</div>
 		</div>
 		{#if streak > 0}
@@ -202,7 +181,7 @@
 					{/each}
 				</div>
 			{:else}
-				<p class="text-sm text-ink-muted">Belum ada target untuk santri ini. Buat dari template dalam 2 ketukan.</p>
+				<p class="text-sm text-ink-muted">Belum ada target untuk santri ini. Pilih juz, surat, atau naik level.</p>
 			{/if}
 		</section>
 
@@ -287,36 +266,12 @@
 		</section>
 	</div>
 
-	<Sheet bind:open={bukaTarget} judul="Target {s.nama.split(' ')[0]}">
-		<span class="label">Tenggat</span>
-		<div class="mb-4 grid grid-cols-3 gap-1.5 rounded-2xl bg-surface-2 p-1.5">
-			{#each [[30, '1 bulan'], [90, '3 bulan'], [180, '6 bulan']] as [d, l] (d)}
-				<button
-					class="min-h-11 rounded-xl text-sm font-bold {durasi === d ? 'bg-surface text-brand shadow-sm' : 'text-ink-soft'}"
-					onclick={() => (durasi = d as number)}>{l}</button
-				>
-			{/each}
-		</div>
-		<span class="label">Pilih template</span>
-		<ul class="space-y-2">
-			{#each TEMPLATE_TARGET as t (t.id)}
-				<li>
-					<button
-						class="flex min-h-16 w-full items-center gap-3 rounded-2xl border border-line bg-surface px-4 text-left active:bg-surface-2"
-						onclick={() => buatTarget(t)}
-					>
-						<span class="flex size-10 items-center justify-center rounded-xl bg-brand-tint text-brand-strong"><Icon n="target" size={20} /></span>
-						<span class="flex-1">
-							<span class="block font-bold">{t.judul}</span>
-							<span class="block text-sm text-ink-muted">{t.ket}</span>
-						</span>
-						<Icon n="plus" size={20} class="text-brand" />
-					</button>
-				</li>
-			{/each}
-		</ul>
-		<p class="mt-3 text-xs text-ink-muted">Target khusus santri menimpa target kelompok dengan jenis yang sama.</p>
-	</Sheet>
+	<TargetSheet
+		bind:open={bukaTarget}
+		judul="Target {s.nama.split(' ')[0]}"
+		santriId={id}
+		catatan="Target khusus santri menimpa target kelompok dengan jenis yang sama."
+	/>
 
 	<Sheet bind:open={bukaMenu} judul={s.nama}>
 		<div class="space-y-2">

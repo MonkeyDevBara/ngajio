@@ -77,7 +77,7 @@ export const METODE: Metode[] = [
 	},
 	{
 		id: 'talaqqi',
-		nama: 'Talaqqi',
+		nama: 'Tilawati',
 		template: true,
 		level: [
 			{ id: 'tal-1', nama: 'Tahsin Lanjutan', jumlahHalaman: 30 },
@@ -242,6 +242,11 @@ function makeSetoran(santri: Santri[]): Setoran[] {
 				record.ayatAkhir = info.ayat;
 			} else {
 				const metode = METODE.find((m) => m.id === s.metodeId)!;
+				const suratTahsin = k.urutan[seq % 10];
+				record.suratAwal = suratTahsin;
+				record.ayatAwal = 1;
+				record.suratAkhir = suratTahsin;
+				record.ayatAkhir = Math.min(surah(suratTahsin).ayat, 5);
 				record.levelId = metode.level[0].id;
 				record.halamanAwal = k.halaman;
 				record.halamanAkhir = Math.min(k.halaman + 1, metode.level[0].jumlahHalaman);
@@ -308,7 +313,7 @@ export const TARGET: Target[] = [
 		kelompokId: 'k3',
 		jenis: 'tahsin',
 		nilaiTarget: 1,
-		satuan: 'jilid',
+		satuan: 'level',
 		mulai: at(dayStart(45), 0, 0),
 		tenggat: at(dayStart(-135), 0, 0)
 	},

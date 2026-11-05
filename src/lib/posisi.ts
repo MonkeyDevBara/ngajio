@@ -8,22 +8,27 @@ export function posisiLabel(santriId: string): string {
 	return `Lanjut ${surah(p.surat).latin} : ${p.ayat}`;
 }
 
+/** Tahsin terakhir santri: surat dan ayat, plus level bila diisi. */
 export function tahsinLabel(santriId: string): string {
-	const p = app.posisiTahsin(santriId);
-	const lv = app.levelById(p.levelId);
-	return `${lv?.nama ?? 'Tahsin'} · hal. ${p.halaman}`;
+	const z = app.setoranSantri(santriId).find((x) => x.jenis === 'tahsin');
+	return z ? teksSetoran(z) : 'Belum ada';
 }
 
 /** Ringkasan satu setoran untuk riwayat dan ekspor. */
 export function teksSetoran(z: Setoran): string {
+	const bagian: string[] = [];
+	if (z.suratAwal != null) {
+		const a = z.ayatAwal === z.ayatAkhir ? `ayat ${z.ayatAwal}` : `ayat ${z.ayatAwal}–${z.ayatAkhir}`;
+		bagian.push(`${surah(z.suratAwal).latin} · ${a}`);
+	}
 	if (z.jenis === 'tahsin') {
 		const lv = app.levelById(z.levelId);
-		const h = z.halamanAwal === z.halamanAkhir ? `hal. ${z.halamanAwal}` : `hal. ${z.halamanAwal}–${z.halamanAkhir}`;
-		return `${lv?.nama ?? 'Tahsin'} · ${h}`;
+		if (lv) bagian.push(lv.nama);
+		if (z.halamanAwal != null) {
+			bagian.push(z.halamanAwal === z.halamanAkhir ? `hal. ${z.halamanAwal}` : `hal. ${z.halamanAwal}–${z.halamanAkhir}`);
+		}
 	}
-	if (z.suratAwal == null) return '-';
-	const a = z.ayatAwal === z.ayatAkhir ? `ayat ${z.ayatAwal}` : `ayat ${z.ayatAwal}–${z.ayatAkhir}`;
-	return `${surah(z.suratAwal).latin} · ${a}`;
+	return bagian.length ? bagian.join(' · ') : z.jenis === 'tahsin' ? 'Tahsin' : '-';
 }
 
 export const NAMA_JENIS = {
@@ -41,27 +46,25 @@ export const TAG_KESALAHAN = {
 export const PENJELASAN_JENIS = {
 	ziyadah: 'Ziyadah: setoran hafalan baru.',
 	murojaah: 'Murajaah: mengulang hafalan yang sudah ada.',
-	tahsin: 'Tahsin: memperbaiki bacaan per jilid dan halaman.'
+	tahsin: 'Tahsin: memperbaiki bacaan surat dan ayat.'
 } as const;
 
 export const NAMA_TARGET: Record<JenisTarget, string> = {
 	'ziyadah-pekan': 'Hafalan baru per pekan',
 	hafalan: 'Capaian hafalan',
-	tahsin: 'Naik jilid tahsin'
+	tahsin: 'Naik level tahsin'
 };
 
-/** Template target (F-18): sekali ketuk membuat target lengkap. */
-export const TEMPLATE_TARGET: {
-	id: string;
-	judul: string;
-	ket: string;
+/** Pilihan target: pengajar cukup memilih jenis lalu mengisi angka. */
+export const PILIHAN_TARGET: {
+	id: 'juz' | 'surat' | 'level';
+	nama: string;
+	tanya: string;
 	jenis: JenisTarget;
-	nilai: number;
 	satuan: string;
+	max: number;
 }[] = [
-	{ id: 'juz30', judul: 'Juz 30 pemula', ket: 'Hafal 5 surat pendek', jenis: 'hafalan', nilai: 5, satuan: 'surat' },
-	{ id: 'pilihan', judul: 'Surat pilihan', ket: 'Hafal 3 surat', jenis: 'hafalan', nilai: 3, satuan: 'surat' },
-	{ id: 'juz', judul: 'Per juz', ket: 'Hafal 1 juz', jenis: 'hafalan', nilai: 1, satuan: 'juz' },
-	{ id: 'pekan', judul: 'Rutin per pekan', ket: '3 setoran hafalan baru per pekan', jenis: 'ziyadah-pekan', nilai: 3, satuan: 'setoran/pekan' },
-	{ id: 'jilid', judul: 'Naik jilid', ket: 'Naik 1 jilid tahsin', jenis: 'tahsin', nilai: 1, satuan: 'jilid' }
+	{ id: 'juz', nama: 'Juz', tanya: 'Berapa juz?', jenis: 'hafalan', satuan: 'juz', max: 30 },
+	{ id: 'surat', nama: 'Surat', tanya: 'Berapa surat?', jenis: 'hafalan', satuan: 'surat', max: 114 },
+	{ id: 'level', nama: 'Naik level', tanya: 'Naik berapa level?', jenis: 'tahsin', satuan: 'level', max: 30 }
 ];

@@ -3,13 +3,14 @@
 	import { goto } from '$app/navigation';
 	import { app, sekarang } from '#lib/store.svelte.ts';
 	import { nilaiLabel, tanggal } from '#lib/format.ts';
-	import { NAMA_TARGET, TEMPLATE_TARGET } from '#lib/posisi.ts';
+	import { NAMA_TARGET } from '#lib/posisi.ts';
 	import type { JenisTarget } from '#lib/types.ts';
 	import Avatar from '#lib/ui/Avatar.svelte';
 	import Icon from '#lib/ui/Icon.svelte';
 	import PageHeader from '#lib/ui/PageHeader.svelte';
 	import Progress from '#lib/ui/Progress.svelte';
 	import Sheet from '#lib/ui/Sheet.svelte';
+	import TargetSheet from '#lib/ui/TargetSheet.svelte';
 
 	const id = $derived(page.params.id ?? '');
 	const k = $derived(app.kelompokById(id));
@@ -32,23 +33,7 @@
 		return { capai, rata, total: ps.length };
 	}
 
-	/* --- Template target (F-18): buka sheet (1), pilih template (2). --- */
 	let bukaTarget = $state(false);
-	let durasi = $state(90);
-	function buatTarget(t: (typeof TEMPLATE_TARGET)[number]) {
-		const mulai = sekarang();
-		app.tambahTarget({
-			kelompokId: id,
-			jenis: t.jenis,
-			nilaiTarget: t.nilai,
-			satuan: t.satuan,
-			mulai: mulai.toISOString(),
-			tenggat: new Date(mulai.getTime() + durasi * 86400000).toISOString()
-		});
-		bukaTarget = false;
-		const baru = app.target.at(-1)!;
-		app.tampilToast(`Target “${t.judul}” dibuat`, { label: 'Urungkan', fn: () => app.hapusTarget(baru.id) });
-	}
 	/* --- Ubah kelompok --- */
 	let bukaEdit = $state(false);
 	let nama = $state('');
@@ -119,7 +104,7 @@
 				>
 			</div>
 			{#if targets.length === 0}
-				<p class="text-sm text-ink-muted">Belum ada target. Buat dari template dalam 2 ketukan.</p>
+				<p class="text-sm text-ink-muted">Belum ada target. Pilih juz, surat, atau naik level.</p>
 			{:else}
 				<div class="space-y-4">
 					{#each targets as t (t.id)}
@@ -181,36 +166,12 @@
 		</section>
 	</div>
 
-	<Sheet bind:open={bukaTarget} judul="Buat target">
-		<span class="label">Tenggat</span>
-		<div class="mb-4 grid grid-cols-3 gap-1.5 rounded-2xl bg-surface-2 p-1.5">
-			{#each [[30, '1 bulan'], [90, '3 bulan'], [180, '6 bulan']] as [d, l] (d)}
-				<button
-					class="min-h-11 rounded-xl text-sm font-bold {durasi === d ? 'bg-surface text-brand shadow-sm' : 'text-ink-soft'}"
-					onclick={() => (durasi = d as number)}>{l}</button
-				>
-			{/each}
-		</div>
-		<span class="label">Pilih template</span>
-		<ul class="space-y-2">
-			{#each TEMPLATE_TARGET as t (t.id)}
-				<li>
-					<button
-						class="flex min-h-16 w-full items-center gap-3 rounded-2xl border border-line bg-surface px-4 text-left active:bg-surface-2"
-						onclick={() => buatTarget(t)}
-					>
-						<span class="flex size-10 items-center justify-center rounded-xl bg-brand-tint text-brand-strong"><Icon n="target" size={20} /></span>
-						<span class="flex-1">
-							<span class="block font-bold">{t.judul}</span>
-							<span class="block text-sm text-ink-muted">{t.ket}</span>
-						</span>
-						<Icon n="plus" size={20} class="text-brand" />
-					</button>
-				</li>
-			{/each}
-		</ul>
-		<p class="mt-3 text-xs text-ink-muted">Target kelompok berlaku ke semua anggota. Target khusus santri menimpa target kelompok.</p>
-	</Sheet>
+	<TargetSheet
+		bind:open={bukaTarget}
+		judul="Buat target"
+		kelompokId={id}
+		catatan="Target kelompok berlaku ke semua anggota. Target khusus santri menimpa target kelompok."
+	/>
 
 	<Sheet bind:open={bukaEdit} judul="Ubah kelompok">
 		<label class="label" for="en">Nama kelompok</label>

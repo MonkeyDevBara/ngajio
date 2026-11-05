@@ -8,6 +8,7 @@
 	import { app } from '#lib/store.svelte.ts';
 	import Icon from '#lib/ui/Icon.svelte';
 	import PasangLayar from '#lib/ui/PasangLayar.svelte';
+	import PullRefresh from '#lib/ui/PullRefresh.svelte';
 	import Toast from '#lib/ui/Toast.svelte';
 
 	let { children }: LayoutProps = $props();
@@ -151,6 +152,9 @@
 {#if bukaPasang}
 	<PasangLayar bind:open={bukaPasang} />
 {/if}
+
+<!-- Formulir (setoran, setup) tidak ikut: tarik tidak sengaja akan membuang isian. -->
+<PullRefresh aktif={!setup && !path.startsWith('/setoran')} />
 
 {#snippet item(t: { href: string; label: string; ikon: string })}
 	<a
