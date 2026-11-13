@@ -57,3 +57,6 @@ Folder `ngajio` belum punya `.git` sendiri (proyek lain punya). Sebelum pekerjaa
 - A14: deteksi data lokal lama: tanpa `mode` dan email sama dengan email mock berarti contoh.
 - A15: penanda waktu server hanya `rev`. `tglSinkron` memakai waktu asli.
 Kontrak lengkap ada di `docs/API.md`.
+
+## Service worker (offline buka halaman)
+`src/service-worker.ts` memasang cangkang SPA (`/`), aset build, dan isi `static/` ke cache `ngajio-<versi>` saat instal. Navigasi selalu dijawab cangkang dari cache, jadi beranda terbuka tanpa sinyal; `/api` dan origin lain tidak disentuh (sinkron tetap lewat outbox). Cache lama dihapus saat aktivasi. Tanpa dependency baru. Nginx menyajikan `/service-worker.js` dengan `no-cache` supaya pembaruan tidak tertahan. Kunjungan pertama harus online sekali agar service worker terpasang.
